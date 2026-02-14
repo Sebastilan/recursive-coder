@@ -47,7 +47,7 @@ class Executor:
         output_truncate: int = 10_000,
         blacklist: list[str] | None = None,
     ) -> None:
-        self.workspace = Path(workspace_dir)
+        self.workspace = Path(workspace_dir).resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.timeout = timeout
         self.output_truncate = output_truncate
@@ -141,6 +141,7 @@ class Executor:
             logger.debug("list_dir escape: rel=%r target=%s ws=%s", rel_path, target, ws_resolved)
             return f"ERROR: path escapes workspace: {rel_path}"
         if not target.is_dir():
+            logger.debug("list_dir not_dir: rel=%r target=%s exists=%s", rel_path, target, target.exists())
             return f"ERROR: not a directory: {rel_path}"
         entries = sorted(target.iterdir())
         lines = []
