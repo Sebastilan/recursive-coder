@@ -178,6 +178,11 @@ body {
   stroke-width: 1.5;
   stroke-dasharray: 6,3;
 }
+.link-dag {
+  stroke: #f59e0b;
+  stroke-width: 1.5;
+  stroke-dasharray: 4,2;
+}
 
 /* 连线标签 */
 .link-label {
@@ -237,6 +242,7 @@ body {
 }
 .order-serial   { background: #312e81; color: #a5b4fc; }
 .order-parallel { background: #1e3a5f; color: #7dd3fc; }
+.order-dag      { background: #3b2e1e; color: #fbbf24; }
 
 .node-time {
   font-size: 11px;
@@ -471,6 +477,7 @@ g.selectAll(".link")
     const parentOrder = d.source.data.order || "";
     if (parentOrder === "serial") return "link link-serial";
     if (parentOrder === "parallel") return "link link-parallel";
+    if (parentOrder === "dag") return "link link-dag";
     return "link";
   })
   .attr("d", d3.linkVertical().x(d => d.x).y(d => d.y));
@@ -487,7 +494,7 @@ g.selectAll(".link-label")
     if (!parentOrder) return "";
     const children = d.source.data.children || [];
     const idx = children.indexOf(d.target.data);
-    const letter = idx === 0 ? "A" : "B";
+    const letter = String.fromCharCode(65 + idx);  // A, B, C, D, E...
     return letter;
   });
 
@@ -642,7 +649,7 @@ function showDetail(data) {
     html += '<h3>子任务 (' + data.children.length + ')  <span style="font-size:11px;color:#64748b;font-weight:400">点击跳转</span></h3>';
     data.children.forEach(function(c, i) {
       const cs = STATUS[c.status] || STATUS.no;
-      const letter = i === 0 ? "A" : "B";
+      const letter = String.fromCharCode(65 + i);  // A, B, C, D, E...
       html += '<div class="child-item" onclick="navigateToNode(' + c._id + ')">';
       html += '<span style="color:#6366f1;font-weight:600;margin-right:4px">' + letter + '</span>';
       html += '<span class="badge badge-' + c.status + '" style="margin-right:6px">' + cs.text + '</span>';

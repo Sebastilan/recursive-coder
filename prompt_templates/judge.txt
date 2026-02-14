@@ -10,10 +10,18 @@
 
 请判断：这个任务是否足够小，可以直接实现并用上述输入数据验证？
 
-判断标准：
-- 任务足够具体，一次编码即可完成
+判断标准（LEAF vs DECOMPOSE）：
+
+**选择 LEAF（直接实现）的条件**：
+- 单个模块/文件，< 200 行代码
+- 明确的输入输出接口，一次编码即可完成
 - 你能定义清晰的验证标准（成功条件）
 - 能写出验证命令（如 python test.py）
+
+**选择 DECOMPOSE（拆分）的条件**：
+- 任务涉及 2 个以上独立模块（如：解析器 + 求解器 + 报告生成器）
+- 任务包含多个算法组件需要分别实现和测试
+- 代码量预计 > 300 行或涉及 3+ 个文件
 
 你必须将结果包裹在 <json> 标签中，严格按以下格式返回：
 
@@ -48,8 +56,13 @@
 </json>
 
 如果任务太大需要拆分，你必须：
-1. 为每个子任务定义清楚数据流——输入从哪来、输出给谁
-2. 定义一份所有子任务共享的 **interface_contract（接口契约）**，明确子任务之间的数据格式约定
+1. 拆分为 **2-5 个子任务**（优先宽而浅，不要嵌套太深）
+2. **每个子任务描述 ≤ 30 词**，简洁具体
+3. 为每个子任务定义清楚数据流——输入从哪来、输出给谁
+4. 用 **dependencies（依赖索引）** 表示子任务执行顺序：
+   - 独立子任务 dependencies=[] → 可并行执行
+   - 有依赖的子任务 dependencies=[0,1] → 等待前置任务完成
+5. 定义一份所有子任务共享的 **interface_contract（接口契约）**
 
 <json>
 {{
@@ -57,7 +70,7 @@
   "interface_contract": "所有子任务共享的接口契约。明确说明：\n1. 每个子任务的输入输出格式\n2. 子任务之间的数据传递格式（如 JSON schema、文件格式等）\n3. 具体示例",
   "subtasks": [
     {{
-      "description": "子任务描述",
+      "description": "子任务A描述（≤30词）",
       "data_port": {{
         "input_description": "该子任务接收什么数据",
         "input_files": ["从父任务继承或从兄弟任务输出"],
@@ -67,11 +80,32 @@
       }},
       "dependencies": [],
       "context_files": []
+    }},
+    {{
+      "description": "子任务B描述（依赖A的输出）",
+      "data_port": {{
+        "input_description": "使用子任务A的输出",
+        "input_files": ["output/xxx.txt"],
+        "output_description": "该子任务产出什么",
+        "output_files": ["output/yyy.txt"]
+      }},
+      "dependencies": [0],
+      "context_files": []
     }}
   ],
   "decomposition_reason": "拆分的理由"
 }}
 </json>
+
+**分解示例**（复杂算法类任务）：
+假设任务是"实现 CVRP Branch-and-Price 求解器"，合理的分解方式：
+- 子任务 0: 实现 VRP 文件解析器和距离矩阵计算 (dependencies=[])
+- 子任务 1: 实现 LP 主问题求解器（set covering formulation）(dependencies=[])
+- 子任务 2: 实现 pricing 子问题（label-setting / SPPRC）(dependencies=[])
+- 子任务 3: 实现 B&P 主循环（列生成 + 分支定界）(dependencies=[0,1,2])
+- 子任务 4: 实现主程序 + 输出验证 (dependencies=[0,1,2,3])
+
+注意：子任务 0、1、2 互相独立，可以并行执行；子任务 3 依赖前三个的输出。
 
 关键：
 - 子任务的输入数据必须可追溯到本任务的输入数据，不要凭空编造测试数据。
@@ -79,3 +113,4 @@
 - execution_plan 要具体到文件名、函数名、参数类型，让 Agent 拿到后可以直接按步骤执行。
 - verification.command 必须是 `python test_xxx.py` 的形式（一个独立的测试脚本）。禁止在 command 中内嵌断言或管道比较（如 `python x.py | python -c "assert ..."`），因为 Agent 需要能够修改测试脚本来修复问题。
 - verification.criteria 要描述验证性质（如"输出包含所有单词及其频次"、"脚本正确读取文件并打印数字之和"），不要预测具体数值。Agent 会根据 criteria 编写测试脚本，测试通过时 exit 0、失败时 exit 非0。
+- 拆分时优先考虑**宽而浅**的结构（多个并行子任务），避免不必要的深度嵌套。

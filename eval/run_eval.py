@@ -23,6 +23,8 @@ L9: cvrp_solver     — CVRP nearest-neighbor + 2-opt (5 modules, low max_agent_
                      Tests: escalation decomposition path (LEAF fail → re-judge → decompose)
 L10: vrp_benchmark  — Multi-instance VRP batch runner (2 formats, 2 algorithms, report)
                      Tests: complex instruction following, escalation decomposition
+L11: cvrp_branch_and_price — CVRP Branch-and-Price solver (column gen + ESPPRC + B&B)
+                     Tests: complex algorithm decomposition, multi-module coordination
 
 Usage:
     DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py                    # run all (qwen-plus)
@@ -527,6 +529,7 @@ CASES: list[TestCase] = [
             "max_depth": 5,
             "max_retries": 1,        # only 1 retry before escalation
             "max_agent_steps": 12,   # 12 steps not enough for 5 modules → fail → escalate
+            "command_timeout": 60,   # 2-opt may take a while
         },
         max_api_calls=200,
     ),
@@ -692,6 +695,139 @@ CASES: list[TestCase] = [
             "max_agent_steps": 15,   # 2 instances + 2 algorithms + report → not enough
         },
         max_api_calls=250,
+    ),
+
+    # ── L11: CVRP Branch-and-Price solver ──
+    TestCase(
+        level=11,
+        name="cvrp_branch_and_price",
+        description="CVRP Branch-and-Price with column generation. Complex multi-module algorithm.",
+        task_text=(
+            "Implement a Python Branch-and-Price (B&P) solver for the Capacitated Vehicle Routing Problem (CVRP).\n\n"
+            "Input: data/instance.vrp in TSPLIB format (E-n22-k4, EUC_2D, 22 nodes, capacity=6000, optimal=375).\n\n"
+            "The B&P algorithm combines column generation with branch-and-bound:\n"
+            "1. Column Generation: iteratively solve a master LP (set covering/partitioning) and a pricing\n"
+            "   subproblem to generate new columns (routes) with negative reduced cost.\n"
+            "2. Pricing Subproblem: solve an Elementary Shortest Path Problem with Resource Constraints (ESPPRC)\n"
+            "   or a simpler bounded knapsack/label-setting to find improving routes.\n"
+            "3. Branch-and-Bound: branch on fractional variables to find integer solutions.\n\n"
+            "Implement these SEPARATE Python modules:\n\n"
+            "Module 1 - vrp_parser.py:\n"
+            "  Parse TSPLIB .vrp file format (EUC_2D).\n"
+            "  Function: parse_vrp(filepath) -> dict with 'name', 'dimension', 'capacity',\n"
+            "  'coords' (dict: node_id -> (x,y)), 'demands' (dict: node_id -> demand), 'depot' (int).\n"
+            "  Distances: Euclidean, rounded to nearest integer (TSPLIB convention).\n\n"
+            "Module 2 - master_problem.py:\n"
+            "  Set covering LP formulation using scipy.optimize.linprog.\n"
+            "  Function: solve_master(routes, demands, n_customers) -> (obj_value, duals, solution)\n"
+            "  Each route is a list of customer IDs with a cost. The LP minimizes total cost\n"
+            "  subject to each customer being covered at least once.\n\n"
+            "Module 3 - pricing.py:\n"
+            "  Pricing subproblem: find a new route with negative reduced cost.\n"
+            "  Use label-setting algorithm on a graph where edge costs are modified by dual values.\n"
+            "  Function: solve_pricing(duals, dist_matrix, demands, capacity, depot, customers) -> route or None\n"
+            "  Returns a feasible route (list of customers) with negative reduced cost, or None if no such route exists.\n\n"
+            "Module 4 - branch_and_price.py:\n"
+            "  Main B&P loop combining column generation and branching.\n"
+            "  Function: solve_bp(instance) -> dict with 'routes', 'total_distance', 'lp_bound',\n"
+            "  'gap_percent', 'iterations', 'n_routes'.\n"
+            "  Steps:\n"
+            "    a. Generate initial routes (e.g., one customer per route).\n"
+            "    b. Column generation loop: solve master LP -> get duals -> pricing -> add column -> repeat.\n"
+            "    c. If LP solution is integer, done. Otherwise, branch on most fractional variable.\n"
+            "    d. Use best-first search for branch selection.\n\n"
+            "Module 5 - main.py:\n"
+            "  Read data/instance.vrp, run B&P solver, validate solution, write output.\n"
+            "  Write to output/solution.txt AND print to stdout:\n"
+            "    Instance: <name>\n"
+            "    Known optimal: 375\n"
+            "    B&P solution: <total_distance>\n"
+            "    LP lower bound: <lp_bound>\n"
+            "    Gap: <percentage>%\n"
+            "    Number of routes: <k>\n"
+            "    Routes:\n"
+            "      Route 1: depot -> c1 -> c2 -> ... -> depot (distance: X, load: Y/CAP)\n\n"
+            "IMPORTANT:\n"
+            "- Each module in a separate .py file.\n"
+            "- scipy is available for LP solving.\n"
+            "- Use integer distances (TSPLIB convention).\n"
+            "- The solution must be FEASIBLE: all customers visited exactly once, each route respects capacity.\n"
+            "- The agent can use web_search to look up algorithm details and optimal values.\n"
+            "- A feasible solution within 5%% of optimal (375) is acceptable.\n"
+        ),
+        data_port=DataPort(
+            input_description="A TSPLIB .vrp file with EUC_2D coordinates for 22-node CVRP instance",
+            input_files=["data/instance.vrp"],
+            output_files=["output/solution.txt"],
+        ),
+        setup_files={
+            "data/instance.vrp": (
+                "NAME : E-n22-k4\n"
+                "COMMENT : (Christophides and Eilon, Min no of trucks: 4, Optimal value: 375)\n"
+                "TYPE : CVRP\n"
+                "DIMENSION : 22\n"
+                "EDGE_WEIGHT_TYPE : EUC_2D\n"
+                "CAPACITY : 6000\n"
+                "NODE_COORD_SECTION\n"
+                "1 145 215\n"
+                "2 151 264\n"
+                "3 159 261\n"
+                "4 130 254\n"
+                "5 128 252\n"
+                "6 163 247\n"
+                "7 146 246\n"
+                "8 161 242\n"
+                "9 142 239\n"
+                "10 163 236\n"
+                "11 148 232\n"
+                "12 128 231\n"
+                "13 156 217\n"
+                "14 129 214\n"
+                "15 146 208\n"
+                "16 164 208\n"
+                "17 141 206\n"
+                "18 147 193\n"
+                "19 164 193\n"
+                "20 129 189\n"
+                "21 155 185\n"
+                "22 139 182\n"
+                "DEMAND_SECTION\n"
+                "1 0\n"
+                "2 1100\n"
+                "3 700\n"
+                "4 800\n"
+                "5 1400\n"
+                "6 2100\n"
+                "7 400\n"
+                "8 800\n"
+                "9 100\n"
+                "10 500\n"
+                "11 600\n"
+                "12 1200\n"
+                "13 1300\n"
+                "14 1300\n"
+                "15 300\n"
+                "16 900\n"
+                "17 2100\n"
+                "18 1000\n"
+                "19 900\n"
+                "20 2500\n"
+                "21 1800\n"
+                "22 700\n"
+                "DEPOT_SECTION\n"
+                " 1\n"
+                " -1\n"
+                "EOF\n"
+            ),
+        },
+        expected_check="contains:375",  # output must reference the known optimal value
+        config_overrides={
+            "max_depth": 5,
+            "max_retries": 2,
+            "max_agent_steps": 30,
+            "command_timeout": 120,  # B&P may take longer to run
+        },
+        max_api_calls=400,
     ),
 ]
 
