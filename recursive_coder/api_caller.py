@@ -86,6 +86,7 @@ class APICaller:
         self.persistence = persistence
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+        self.total_cached_tokens = 0
         self.call_count = 0
         self.latencies: list[int] = []
 
@@ -139,9 +140,12 @@ class APICaller:
         usage = data.get("usage", {})
         inp = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
         out = usage.get("completion_tokens") or usage.get("output_tokens", 0)
+        prompt_details = usage.get("prompt_tokens_details", {})
+        cached = prompt_details.get("cached_tokens", 0)
         self.total_input_tokens += inp
         self.total_output_tokens += out
-        logger.info("  tokens in=%d out=%d  latency=%dms", inp, out, latency)
+        self.total_cached_tokens += cached
+        logger.info("  tokens in=%d out=%d cached=%d  latency=%dms", inp, out, cached, latency)
 
         if self.persistence:
             self.persistence.save_api_call({
@@ -153,6 +157,7 @@ class APICaller:
                 "has_tools": tools is not None,
                 "input_tokens": inp,
                 "output_tokens": out,
+                "cached_tokens": cached,
                 "latency_ms": latency,
                 "error": error_text,
             })
@@ -241,5 +246,10 @@ class APICaller:
             "total_calls": self.call_count,
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
+            "total_cached_tokens": self.total_cached_tokens,
+            "cache_hit_rate": (
+                round(self.total_cached_tokens / self.total_input_tokens, 3)
+                if self.total_input_tokens > 0 else 0
+            ),
             "latencies": self.latencies,
         }

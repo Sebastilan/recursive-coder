@@ -13,6 +13,10 @@ L4: csv_pipeline   — Multi-step: parse CSV → filter → aggregate → output
                      Tests: data flow between subtasks, dependency ordering
 L5: expression_eval— Build expression evaluator (tokenize→parse→compute)
                      Tests: deeper recursion, potential backtracking
+L6: multi_file_stats— Multi-file text analysis pipeline (3 modules + orchestrator)
+                     Tests: forced decomposition, inter-module data flow, integration
+L7: query_engine    — Mini CSV query engine (4 modules, complex data flow)
+                     Tests: 2-level decomposition, dependency ordering, integration
 
 Usage:
     DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py                    # run all (qwen-plus)
@@ -197,6 +201,121 @@ CASES: list[TestCase] = [
         expected_check="contains:5",  # first expression should eval to 5
         config_overrides={"max_depth": 5, "max_retries": 3, "max_agent_steps": 30},
         max_api_calls=120,
+    ),
+
+    # ── L6: Multi-file text analysis pipeline (force decomposition) ──
+    TestCase(
+        level=6,
+        name="multi_file_stats",
+        description="Multi-file text analysis pipeline. Forces decomposition into 3+ subtasks.",
+        task_text=(
+            "Build a multi-file text analysis pipeline with the following SEPARATE modules:\n\n"
+            "Module 1 - text_parser.py: Read all .txt files from data/texts/ directory. "
+            "For each file, extract a word list (lowercase, strip punctuation) and a sentence "
+            "list (split by period/question mark/exclamation mark). "
+            "Export function: parse_file(filepath) -> dict with keys 'words', 'sentences', 'filename'\n\n"
+            "Module 2 - stats_calculator.py: Given parsed data from Module 1, compute per-file "
+            "statistics: word_count, unique_word_count, sentence_count, avg_words_per_sentence, "
+            "top_3_most_frequent_words. "
+            "Export function: calculate_stats(parsed_data: dict) -> dict\n\n"
+            "Module 3 - report_generator.py: Using stats from Module 2 for all files, generate:\n"
+            "  - output/file_stats.csv: columns = filename, word_count, unique_words, sentences, "
+            "avg_words_per_sentence, top_words (semicolon-separated)\n"
+            "  - output/summary.txt: total files processed, total words across all files, "
+            "total sentences, the single most common word across ALL files with its count\n"
+            "Export function: generate_reports(all_stats: list[dict], output_dir: str)\n\n"
+            "Module 4 - main.py: Orchestrate the pipeline: parse all files -> compute stats -> generate reports.\n\n"
+            "IMPORTANT: Each module MUST be a separate .py file with clearly defined function interfaces. "
+            "The modules must import from each other (main imports all three, report_generator uses stats output)."
+        ),
+        data_port=DataPort(
+            input_description="Three text files in data/texts/ directory",
+            input_files=["data/texts/animals.txt", "data/texts/nature.txt", "data/texts/food.txt"],
+            output_files=["output/file_stats.csv", "output/summary.txt"],
+        ),
+        setup_files={
+            "data/texts/animals.txt": (
+                "The cat sat on the mat. The cat is very fluffy. "
+                "A fluffy cat likes warm milk. The dog barked at the cat. "
+                "The dog is friendly."
+            ),
+            "data/texts/nature.txt": (
+                "The sun rises in the east every morning. Birds sing in the tall trees. "
+                "The river flows to the sea. Fish swim in the river. "
+                "The trees provide shade and shelter."
+            ),
+            "data/texts/food.txt": (
+                "Pizza is a popular food around the world. "
+                "Many people enjoy eating pizza with cheese. "
+                "Bread and cheese make a great combination. "
+                "Fresh bread smells wonderful. People love good food."
+            ),
+        },
+        expected_check="contains:the",  # "the" is the most frequent word across all files
+        config_overrides={"max_depth": 4, "max_retries": 3, "max_agent_steps": 20},
+        max_api_calls=120,
+    ),
+
+    # ── L7: Mini CSV query engine (force 2-level decomposition) ──
+    TestCase(
+        level=7,
+        name="query_engine",
+        description="Mini CSV query engine with 4 modules. Forces multi-level decomposition.",
+        task_text=(
+            "Build a simple CSV query engine with these SEPARATE modules:\n\n"
+            "Module 1 - schema_reader.py: Read CSV file, infer column types (detect if values "
+            "are integers, floats, or strings by attempting conversion). Return a Schema object "
+            "with column names and types. "
+            "Export function: read_schema(csv_path: str) -> dict  (keys: 'columns' list of "
+            "{name, type}, 'data' list of row dicts with typed values)\n\n"
+            "Module 2 - query_parser.py: Parse simple SQL-like query strings. Supported syntax:\n"
+            "  SELECT col1,col2 WHERE col3>value ORDER BY col1 DESC LIMIT n\n"
+            "  - SELECT is required, others are optional\n"
+            "  - WHERE supports: >, <, >=, <=, ==, != (for numbers compare numerically, for strings lexicographic)\n"
+            "  - ORDER BY supports ASC (default) and DESC\n"
+            "  - LIMIT is an integer\n"
+            "Export function: parse_query(query_str: str) -> dict with keys: "
+            "'select_columns', 'where_conditions', 'order_by', 'order_dir', 'limit'\n\n"
+            "Module 3 - query_executor.py: Execute a parsed query against typed data. "
+            "Apply WHERE filters, SELECT columns, ORDER BY sorting, and LIMIT. "
+            "Export function: execute_query(parsed_query: dict, schema: dict) -> list[dict]\n\n"
+            "Module 4 - main.py: Read data/employees.csv, read data/queries.txt (one query per line), "
+            "execute each query, write results to output/results.txt in this format:\n"
+            "  --- Query: <original query> ---\n"
+            "  col1 | col2 | ...\n"
+            "  val1 | val2 | ...\n"
+            "  (N rows)\n"
+            "  <blank line>\n\n"
+            "IMPORTANT: Each module MUST be in a separate .py file. The query parser must NOT "
+            "use eval() or exec(). Test with the provided queries."
+        ),
+        data_port=DataPort(
+            input_description="A CSV file with employee data and a text file with queries",
+            input_files=["data/employees.csv", "data/queries.txt"],
+            output_files=["output/results.txt"],
+        ),
+        setup_files={
+            "data/employees.csv": (
+                "name,department,salary,age\n"
+                "Alice,Engineering,95000,32\n"
+                "Bob,Marketing,72000,28\n"
+                "Charlie,Engineering,88000,35\n"
+                "Diana,Marketing,82000,30\n"
+                "Eve,Engineering,105000,40\n"
+                "Frank,Sales,68000,26\n"
+                "Grace,Engineering,91000,29\n"
+                "Henry,Sales,75000,33\n"
+            ),
+            "data/queries.txt": (
+                "SELECT name,salary WHERE department==Engineering ORDER BY salary DESC\n"
+                "SELECT name,department WHERE salary>80000\n"
+                "SELECT name,age WHERE age<30 ORDER BY name ASC\n"
+                "SELECT name,department,salary ORDER BY salary DESC LIMIT 3\n"
+            ),
+        },
+        expected_check="contains:Eve",  # Eve is the highest-paid in Engineering, first row of first query
+        config_overrides={"max_depth": 5, "max_retries": 3, "max_agent_steps": 25},
+        max_api_calls=200,
     ),
 ]
 
@@ -464,7 +583,7 @@ async def main(levels: list[int] | None = None, use_mock: bool = False, model: s
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run end-to-end evaluation")
-    parser.add_argument("--level", type=int, nargs="+", help="Only run specific levels (1-5)")
+    parser.add_argument("--level", type=int, nargs="+", help="Only run specific levels (1-7)")
     parser.add_argument("--model", type=str, default="qwen-plus", help="Model to use (default: qwen-max)")
     parser.add_argument("--mock", action="store_true", help="Use mock API (no network needed)")
     args = parser.parse_args()
