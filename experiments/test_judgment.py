@@ -112,6 +112,8 @@ async def run_judgment(api: APICaller, task_name: str, task_desc: str, model: st
         "task_name": task_name,
         "task_desc": task_desc[:80],
         "result": result,
+        "raw_content": content,
+        "messages": messages,
         "elapsed_s": round(elapsed, 2),
         "tokens": {
             "input": usage.get("prompt_tokens", 0),
@@ -124,6 +126,7 @@ async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="qwen-plus")
     parser.add_argument("--task", help="Only run specific task by name")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show full input/output")
     args = parser.parse_args()
 
     api = APICaller()
@@ -146,6 +149,15 @@ async def main():
         print(f"{'─' * 60}")
 
         result = await run_judgment(api, name, desc, args.model)
+
+        if args.verbose:
+            print(f"\n--- INPUT (system) ---")
+            print(result["messages"][0]["content"])
+            print(f"\n--- INPUT (user) ---")
+            print(result["messages"][1]["content"])
+            print(f"\n--- OUTPUT (raw) ---")
+            print(result["raw_content"])
+            print(f"--- END ---\n")
 
         r = result["result"]
         if r.get("parse_error"):
