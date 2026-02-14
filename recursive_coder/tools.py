@@ -148,7 +148,10 @@ class ToolExecutor:
             success = False
 
         duration = int((time.monotonic() - t0) * 1000)
-        logger.debug("tool=%s success=%s duration=%dms", tool_name, success, duration)
+        # Log arguments for debugging (truncate long values like file content)
+        log_args = {k: (v[:80] + "..." if isinstance(v, str) and len(v) > 80 else v)
+                    for k, v in arguments.items()}
+        logger.debug("tool=%s args=%s success=%s duration=%dms", tool_name, log_args, success, duration)
         return ToolCallRecord(
             tool_name=tool_name,
             arguments=arguments,

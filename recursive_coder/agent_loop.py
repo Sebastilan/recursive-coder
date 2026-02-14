@@ -131,9 +131,11 @@ class AgentLoop:
                         "content": record.result_summary,
                     })
 
-                # idle detection
+                # idle detection: file writes always reset; successful reads also reset
                 if has_file_change:
                     idle_counter = 0
+                elif any(tc.success for tc in step.tool_calls):
+                    idle_counter = 0  # successful read/list/shell = making progress
                 else:
                     idle_counter += 1
 

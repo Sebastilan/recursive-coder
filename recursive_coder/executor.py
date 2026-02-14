@@ -114,7 +114,7 @@ class Executor:
     async def write_file(self, rel_path: str, content: str) -> str:
         """Write content to a file inside the workspace. Returns abs path."""
         target = (self.workspace / rel_path).resolve()
-        if not str(target).startswith(str(self.workspace.resolve())):
+        if not str(target).lower().startswith(str(self.workspace.resolve()).lower()):
             return f"ERROR: path escapes workspace: {rel_path}"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -123,7 +123,7 @@ class Executor:
 
     async def read_file(self, rel_path: str) -> str:
         target = (self.workspace / rel_path).resolve()
-        if not str(target).startswith(str(self.workspace.resolve())):
+        if not str(target).lower().startswith(str(self.workspace.resolve()).lower()):
             return f"ERROR: path escapes workspace: {rel_path}"
         if not target.exists():
             return f"ERROR: file not found: {rel_path}"
@@ -131,8 +131,14 @@ class Executor:
         return self._truncate(text)
 
     async def list_dir(self, rel_path: str = ".") -> str:
+        # Normalize common bad inputs from LLMs
+        if not rel_path or rel_path in ("/", "\\"):
+            rel_path = "."
         target = (self.workspace / rel_path).resolve()
-        if not str(target).startswith(str(self.workspace.resolve())):
+        ws_resolved = self.workspace.resolve()
+        # Case-insensitive comparison on Windows
+        if not str(target).lower().startswith(str(ws_resolved).lower()):
+            logger.debug("list_dir escape: rel=%r target=%s ws=%s", rel_path, target, ws_resolved)
             return f"ERROR: path escapes workspace: {rel_path}"
         if not target.is_dir():
             return f"ERROR: not a directory: {rel_path}"
