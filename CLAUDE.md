@@ -15,6 +15,12 @@ L9-L10 VRP 基准测试（测试升级分解路径）：
 
 上下文缓存监控已集成（api_caller.py 记录 cached_tokens），隐式缓存已确认生效。
 
+Web 搜索工具已集成（web_search + fetch_page），使用 DuckDuckGo HTML 搜索。
+代理配置：config.yaml `proxy` 字段 或 `HTTPS_PROXY` 环境变量。
+- 本地机代理：`http://127.0.0.1:7897`
+- 远程机代理：`http://127.0.0.1:7890`（Clash）
+- DDG 需要 Cookie `kl=us-en` 才能从国内正常获取英文结果。
+
 ## 快速开始
 
 1. 设置 API Key（默认模型 qwen-plus）：
@@ -76,6 +82,7 @@ python eval/run_eval.py --level 9 10 --model qwen-plus
 - `api_caller.py` — 统一 LLM API 调用（支持 Anthropic / OpenAI / OpenAI-compatible）
 - `prompt_builder.py` — 模板加载 + 上下文注入
 - `models.py` — TaskNode / TaskTree 数据模型
+- `web_tools.py` — Web 搜索 + 页面抓取（DuckDuckGo + HTML-to-text）
 - `executor.py` — 沙盒命令执行
 - `evaluator.py` — 评估报告生成
 - `optimizer.py` — 迭代优化（分析报告 -> 调整 prompt/config）
@@ -87,6 +94,7 @@ python eval/run_eval.py --level 9 10 --model qwen-plus
 - `max_retries: 3` — 单任务最大重试
 - `max_total_api_calls: 500` — API 调用总量上限
 - `command_timeout: 60` — 命令执行超时（秒）
+- `proxy: ""` — Web 搜索代理（也可用 `HTTPS_PROXY` 环境变量）
 
 ## 已踩过的坑
 
@@ -96,3 +104,7 @@ python eval/run_eval.py --level 9 10 --model qwen-plus
 4. **Windows 路径大小写**：`Path.resolve()` 在 Windows 上驱动器号大小写不一致导致路径逃逸检查误报。解决：用 `.lower()` 做大小写无关比较
 5. **相对路径 workspace**：Executor 用相对路径存 workspace，不同时刻 resolve 结果不同。解决：init 时立即 `.resolve()` 为绝对路径
 6. **idle detection 过于激进**：只有 write_file 才重置计数器，正常的 read_file/list_dir 探索会触发 idle 停止。解决：任何成功的 tool call 都重置计数器
+7. **max_retries config 未传递**：config 中设置 `max_retries=1` 但 TaskNode 始终用默认值 3。解决：processor.py 创建 TaskNode 时读取 config
+8. **GBK 编码崩溃**：Windows 中文环境 `print()` 遇到 Unicode 特殊字符（如 `\u2212`）崩溃。解决：try/except UnicodeEncodeError 后 fallback `errors='replace'`
+9. **Google 搜索返回 JS 渲染页**：httpx 无法获取 Google 搜索结果（全是 JS），Bing 国内版返回垃圾结果。解决：改用 DuckDuckGo HTML 版（`html.duckduckgo.com`）+ Cookie `kl=us-en`
+10. **DuckDuckGo 202 问题**：DDG 从某些 IP 返回 202 空页面。解决：设置 Cookie `kl=us-en` 强制英文区域后恢复正常
