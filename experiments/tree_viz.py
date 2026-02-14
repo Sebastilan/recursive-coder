@@ -19,6 +19,13 @@
         "time": float,         # 总耗时秒（可选）
         "judge_time": float,   # Judge 耗时（可选）
         "split_time": float,   # 分解耗时（可选）
+        "order": str,          # "serial" | "parallel"（可选）
+        "produces": str,       # 产出描述（可选）
+        "context": str,        # 已有数据描述（可选）
+        "exec_plan": [str],    # 执行计划步骤（可选）
+        "exec_blockers": [str],# 缺失的前置条件（可选）
+        "exec_output": str,    # 执行产出（可选）
+        "exec_time": float,    # 执行规划耗时（可选）
         "children": [...]      # 子节点列表（可选）
     }
 """
@@ -48,6 +55,14 @@ def node_to_dict(node: Any) -> dict:
                        + getattr(node, "split_time", 0), 1),
         "judge_time": round(getattr(node, "judge_time", 0), 1),
         "split_time": round(getattr(node, "split_time", 0), 1),
+        # 新增字段
+        "order": getattr(node, "order", ""),
+        "produces": getattr(node, "produces", ""),
+        "context": getattr(node, "context", ""),
+        "exec_plan": getattr(node, "exec_plan", []),
+        "exec_blockers": getattr(node, "exec_blockers", []),
+        "exec_output": getattr(node, "exec_output", ""),
+        "exec_time": round(getattr(node, "exec_time", 0), 1),
     }
     if node.children:
         d["children"] = [node_to_dict(c) for c in node.children]
@@ -139,17 +154,6 @@ body {
 .dot-no { background: #ef4444; }
 .dot-depth { background: #f97316; }
 
-/* ── 图例 ── */
-.legend {
-  display: flex;
-  gap: 16px;
-  font-size: 12px;
-  color: #64748b;
-  padding: 8px 24px;
-  background: #0f172a;
-}
-.legend-item { display: flex; align-items: center; gap: 4px; }
-
 /* ── 树容器 ── */
 #tree-container {
   width: 100vw;
@@ -165,10 +169,26 @@ body {
   stroke: #334155;
   stroke-width: 1.5;
 }
+.link-serial {
+  stroke: #6366f1;
+  stroke-width: 2;
+}
+.link-parallel {
+  stroke: #334155;
+  stroke-width: 1.5;
+  stroke-dasharray: 6,3;
+}
+
+/* 连线标签 */
+.link-label {
+  font-size: 10px;
+  fill: #64748b;
+  text-anchor: middle;
+}
 
 /* ── 节点框 ── */
 .node-box {
-  width: 220px;
+  width: 240px;
   background: #1e293b;
   border: 1px solid #334155;
   border-radius: 8px;
@@ -208,6 +228,16 @@ body {
 .badge-no       { background: #ef4444; }
 .badge-no_depth { background: #f97316; }
 
+.order-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.order-serial   { background: #312e81; color: #a5b4fc; }
+.order-parallel { background: #1e3a5f; color: #7dd3fc; }
+
 .node-time {
   font-size: 11px;
   color: #64748b;
@@ -221,13 +251,30 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.node-produces {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node-exec-info {
+  font-size: 10px;
+  margin-top: 4px;
+  color: #94a3b8;
+}
+.node-exec-info .blocker-tag {
+  color: #f87171;
+  font-weight: 600;
+}
 
 /* ── 详情面板 ── */
 #detail {
   position: fixed;
   top: 56px;
   right: 0;
-  width: 360px;
+  width: 400px;
   height: calc(100vh - 56px);
   background: #1e293b;
   border-left: 1px solid #334155;
@@ -269,6 +316,44 @@ body {
 #detail .detail-badge {
   display: inline-block;
   margin-bottom: 12px;
+}
+
+.context-box {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.exec-step {
+  padding: 4px 0;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.5;
+  border-bottom: 1px solid #1e293b;
+}
+.exec-step:last-child { border-bottom: none; }
+.exec-step .step-num {
+  color: #6366f1;
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.blocker-item {
+  padding: 6px 10px;
+  background: #2d1215;
+  border: 1px solid #7f1d1d;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #fca5a5;
+  margin: 4px 0;
 }
 
 /* ── 子任务可点击 ── */
@@ -342,7 +427,7 @@ document.getElementById("stats-bar").innerHTML = [
 ].join("");
 
 // ── 布局 ──
-const BOX_W = 220, BOX_H = 80;
+const BOX_W = 240, BOX_H = 100;
 const NODE_W = BOX_W + 40;   // 节点水平间距
 const NODE_H = BOX_H + 50;   // 节点垂直间距
 
@@ -382,8 +467,29 @@ svg.call(zoom.transform, d3.zoomIdentity.translate(initialX, initialY));
 g.selectAll(".link")
   .data(root.links())
   .join("path")
-  .attr("class", "link")
+  .attr("class", d => {
+    const parentOrder = d.source.data.order || "";
+    if (parentOrder === "serial") return "link link-serial";
+    if (parentOrder === "parallel") return "link link-parallel";
+    return "link";
+  })
   .attr("d", d3.linkVertical().x(d => d.x).y(d => d.y));
+
+// 连线标签（A/B + SERIAL/PARALLEL）
+g.selectAll(".link-label")
+  .data(root.links())
+  .join("text")
+  .attr("class", "link-label")
+  .attr("x", d => (d.source.x + d.target.x) / 2)
+  .attr("y", d => (d.source.y + d.target.y) / 2 - 6)
+  .text(d => {
+    const parentOrder = d.source.data.order || "";
+    if (!parentOrder) return "";
+    const children = d.source.data.children || [];
+    const idx = children.indexOf(d.target.data);
+    const letter = idx === 0 ? "A" : "B";
+    return letter;
+  });
 
 // ── 节点 ──
 const nodes = g.selectAll(".node")
@@ -393,39 +499,69 @@ const nodes = g.selectAll(".node")
   .attr("transform", d => "translate(" + d.x + "," + d.y + ")");
 
 nodes.each(function(d) {
+  const data = d.data;
+  const s = data.status || "no";
+  const info = STATUS[s] || STATUS.no;
+  const label = data.label || "";
+  const truncated = label.length > 50 ? label.slice(0, 50) + "\u2026" : label;
+  const timeStr = (data.time || 0).toFixed(1) + "s";
+  const produces = data.produces || "";
+  const order = data.order || "";
+  const execPlan = data.exec_plan || [];
+  const execBlockers = data.exec_blockers || [];
+
+  // 计算节点框高度
+  let boxH = BOX_H;
+  if (produces) boxH += 16;
+  if (execPlan.length > 0) boxH += 16;
+
   const fo = d3.select(this).append("foreignObject")
     .attr("width", BOX_W)
-    .attr("height", BOX_H)
+    .attr("height", boxH)
     .attr("x", -BOX_W / 2)
     .attr("y", -BOX_H / 2);
 
-  const s = d.data.status || "no";
-  const info = STATUS[s] || STATUS.no;
-  const label = d.data.label || "";
-  const truncated = label.length > 45 ? label.slice(0, 45) + "\u2026" : label;
-  const timeStr = (d.data.time || 0).toFixed(1) + "s";
-
   const div = fo.append("xhtml:div")
     .attr("class", "node-box status-" + s)
-    .attr("data-id", d.data._id || "");
+    .attr("data-id", data._id || "");
 
-  div.html(
-    '<div class="node-header">' +
-      '<span class="badge badge-' + s + '">' + info.text + '</span>' +
-      '<span class="node-time">' + timeStr + '</span>' +
-    '</div>' +
-    '<div class="node-label">' + escapeHtml(truncated) + '</div>'
-  );
+  // 构建 HTML
+  let html = '<div class="node-header">';
+  html += '<span>';
+  html += '<span class="badge badge-' + s + '">' + info.text + '</span>';
+  if (order) {
+    html += ' <span class="order-badge order-' + order + '">' + order + '</span>';
+  }
+  html += '</span>';
+  html += '<span class="node-time">' + timeStr + '</span>';
+  html += '</div>';
+  html += '<div class="node-label">' + escapeHtml(truncated) + '</div>';
+
+  if (produces) {
+    const pTrunc = produces.length > 40 ? produces.slice(0, 40) + "\u2026" : produces;
+    html += '<div class="node-produces">\u2192 ' + escapeHtml(pTrunc) + '</div>';
+  }
+
+  if (s === "yes" && execPlan.length > 0) {
+    html += '<div class="node-exec-info">';
+    html += execPlan.length + ' steps';
+    if (execBlockers.length > 0) {
+      html += ' <span class="blocker-tag">' + execBlockers.length + ' blocker(s)</span>';
+    }
+    html += '</div>';
+  }
+
+  div.html(html);
 
   div.on("click", function(event) {
     event.stopPropagation();
     d3.selectAll(".node-box").classed("active", false);
     d3.select(this).classed("active", true);
-    showDetail(d.data);
+    showDetail(data);
   });
 
   // 存储引用
-  nodeRef[d.data._id] = { d3Node: d, dom: div.node() };
+  nodeRef[data._id] = { d3Node: d, dom: div.node() };
 });
 
 // ── 详情面板 ──
@@ -433,15 +569,59 @@ function showDetail(data) {
   const s = data.status || "no";
   const info = STATUS[s] || STATUS.no;
   const panel = document.getElementById("detail-content");
+  const order = data.order || "";
+  const produces = data.produces || "";
+  const context = data.context || "";
+  const execPlan = data.exec_plan || [];
+  const execBlockers = data.exec_blockers || [];
+  const execOutput = data.exec_output || "";
+  const execTime = data.exec_time || 0;
 
   let html = '<span class="badge badge-' + s + ' detail-badge">' + info.text + '</span>';
+  if (order) {
+    html += ' <span class="order-badge order-' + order + ' detail-badge">' + order.toUpperCase() + '</span>';
+  }
 
   html += '<h3>任务描述</h3>';
   html += '<div class="detail-text">' + escapeHtml(data.label || "") + '</div>';
 
+  // 已有数据
+  if (context) {
+    html += '<h3>已有数据 (Context)</h3>';
+    html += '<div class="context-box">' + escapeHtml(context) + '</div>';
+  }
+
+  // 产出
+  if (produces) {
+    html += '<h3>产出 (Produces)</h3>';
+    html += '<div class="detail-text">' + escapeHtml(produces) + '</div>';
+  }
+
   if (data.detail) {
     html += '<h3>Judge 回复</h3>';
     html += '<div class="detail-text">' + escapeHtml(data.detail) + '</div>';
+  }
+
+  // 执行计划
+  if (execPlan.length > 0) {
+    html += '<h3>执行计划 (' + execPlan.length + ' steps, ' + execTime.toFixed(1) + 's)</h3>';
+    html += '<div>';
+    execPlan.forEach(function(step, i) {
+      html += '<div class="exec-step"><span class="step-num">' + (i+1) + '.</span>' + escapeHtml(step) + '</div>';
+    });
+    html += '</div>';
+    if (execOutput) {
+      html += '<h3>执行产出</h3>';
+      html += '<div class="detail-text">' + escapeHtml(execOutput) + '</div>';
+    }
+  }
+
+  // Blockers
+  if (execBlockers.length > 0) {
+    html += '<h3>缺失依赖 (' + execBlockers.length + ')</h3>';
+    execBlockers.forEach(function(b) {
+      html += '<div class="blocker-item">' + escapeHtml(b) + '</div>';
+    });
   }
 
   html += '<h3>耗时</h3>';
@@ -452,6 +632,9 @@ function showDetail(data) {
   if (data.split_time) {
     html += '  |  分解: ' + data.split_time + 's';
   }
+  if (execTime > 0) {
+    html += '  |  规划: ' + execTime.toFixed(1) + 's';
+  }
   html += '  |  合计: ' + (data.time || 0).toFixed(1) + 's';
   html += '</div>';
 
@@ -459,10 +642,15 @@ function showDetail(data) {
     html += '<h3>子任务 (' + data.children.length + ')  <span style="font-size:11px;color:#64748b;font-weight:400">点击跳转</span></h3>';
     data.children.forEach(function(c, i) {
       const cs = STATUS[c.status] || STATUS.no;
+      const letter = i === 0 ? "A" : "B";
       html += '<div class="child-item" onclick="navigateToNode(' + c._id + ')">';
+      html += '<span style="color:#6366f1;font-weight:600;margin-right:4px">' + letter + '</span>';
       html += '<span class="badge badge-' + c.status + '" style="margin-right:6px">' + cs.text + '</span>';
       html += '<span class="node-time" style="margin-left:4px">' + (c.time || 0).toFixed(1) + 's</span>';
       html += '<div class="child-label">' + escapeHtml(c.label) + '</div>';
+      if (c.produces) {
+        html += '<div style="font-size:11px;color:#64748b;margin-top:2px">\u2192 ' + escapeHtml(c.produces) + '</div>';
+      }
       html += '</div>';
     });
   }
@@ -518,28 +706,78 @@ if __name__ == "__main__":
         "status": "no",
         "detail": "NO - 需要多个复杂模块协作",
         "time": 2.3, "judge_time": 1.5, "split_time": 0.8,
+        "order": "serial",
+        "produces": "",
+        "context": "",
+        "exec_plan": [], "exec_blockers": [], "exec_output": "", "exec_time": 0,
         "children": [
             {
-                "label": "实现主问题框架（列生成循环 + RMP）",
-                "status": "no",
-                "detail": "NO - 仍需要 LP 求解器 + 列管理",
-                "time": 1.8, "judge_time": 1.2, "split_time": 0.6,
-                "children": [
-                    {"label": "实现受限主问题 RMP 的 LP 建模",
-                     "status": "yes", "detail": "YES - 单个 LP 建模任务",
-                     "time": 0.9, "judge_time": 0.9, "split_time": 0},
-                    {"label": "实现列生成迭代循环与收敛判断",
-                     "status": "yes", "detail": "YES - 标准迭代逻辑",
-                     "time": 0.7, "judge_time": 0.7, "split_time": 0},
+                "label": "获取 TSPLIB 基准实例 + 研究 B&P 算法细节",
+                "status": "yes",
+                "detail": "YES - 数据获取 + 文献研究可在单次会话完成",
+                "time": 0.9, "judge_time": 0.9, "split_time": 0,
+                "order": "",
+                "produces": "TSPLIB 数据文件 + B&P 算法伪代码和论文笔记",
+                "context": "",
+                "exec_plan": [
+                    "use web_search to find TSPLIB CVRP benchmark instances",
+                    "fetch_page to download .vrp files from TSPLIB mirror",
+                    "use web_search for Branch-and-Price CVRP papers",
+                    "summarize algorithm steps and pseudocode",
                 ],
+                "exec_blockers": [],
+                "exec_output": "TSPLIB .vrp files + algorithm notes",
+                "exec_time": 1.2,
             },
             {
-                "label": "实现 SPPRC 定价子问题求解器",
-                "status": "no_depth",
-                "detail": "NO - 标签设定算法 + 支配规则较复杂",
-                "time": 1.1, "judge_time": 1.1, "split_time": 0,
+                "label": "基于获取的数据实现 B&P 算法",
+                "status": "no",
+                "detail": "NO - 仍需要多个子模块",
+                "time": 1.8, "judge_time": 1.2, "split_time": 0.6,
+                "order": "parallel",
+                "produces": "",
+                "context": "Output from prior task: TSPLIB 数据文件 + B&P 算法伪代码和论文笔记",
+                "exec_plan": [], "exec_blockers": [], "exec_output": "", "exec_time": 0,
+                "children": [
+                    {
+                        "label": "实现列生成主问题框架（RMP + LP 求解）",
+                        "status": "yes",
+                        "detail": "YES - 单个 LP 建模任务",
+                        "time": 0.9, "judge_time": 0.9, "split_time": 0,
+                        "order": "",
+                        "produces": "C++ RMP 求解模块",
+                        "context": "Output from prior task: TSPLIB 数据文件 + B&P 算法伪代码和论文笔记",
+                        "exec_plan": [
+                            "Create C++ project structure with CMakeLists.txt",
+                            "Implement RMP class with LP relaxation",
+                            "Add column management (add/remove columns)",
+                            "Write unit tests for RMP",
+                        ],
+                        "exec_blockers": [],
+                        "exec_output": "rmp.cpp + rmp.h",
+                        "exec_time": 1.5,
+                    },
+                    {
+                        "label": "实现 SPPRC 定价子问题求解器",
+                        "status": "yes",
+                        "detail": "YES - 标签设定算法可在单次会话实现",
+                        "time": 0.7, "judge_time": 0.7, "split_time": 0,
+                        "order": "",
+                        "produces": "C++ SPPRC 求解模块",
+                        "context": "Output from prior task: TSPLIB 数据文件 + B&P 算法伪代码和论文笔记",
+                        "exec_plan": [
+                            "Implement label-setting algorithm for ESPPRC",
+                            "Add dominance rules for label pruning",
+                            "Implement resource constraints (capacity, time)",
+                            "Write tests with small graph instances",
+                        ],
+                        "exec_blockers": [],
+                        "exec_output": "spprc.cpp + spprc.h",
+                        "exec_time": 1.3,
+                    },
+                ],
             },
         ],
     }
-    save_tree_html(example, "experiments/example_tree.html", title="示例：CVRP 分解树")
+    save_tree_html(example, "experiments/example_tree.html", title="示例：CVRP 分解树 (v2)")
     print("已保存: experiments/example_tree.html")
