@@ -5,11 +5,16 @@
 L1-L5 端到端测试全部通过（qwen-plus 模型，远程机 DESKTOP-CFEOJ9J）。
 验证机制已重构为 criteria-based（Agent 自写测试脚本，Framework 只检查 returncode）。
 
-L6-L7 递归分解测试已添加，待在远程机验证：
+L6-L7 递归分解测试已添加：
 - L6 (multi_file_stats): 多文件文本统计管道，3 模块 + 编排，强制分解
 - L7 (query_engine): 迷你 CSV 查询引擎，4 模块 + 复杂数据流，强制 2 级分解
 
-上下文缓存监控已集成（api_caller.py 记录 cached_tokens），隐式缓存自动生效。
+L6 首次运行结果（2026-02-14）：
+- Judge 正确分解为 4 个子任务（text_parser → stats_calculator → report_generator → main）
+- 子任务依赖链正确
+- 因 DashScope 欠费中断，待充值后完整跑通
+
+上下文缓存监控已集成（api_caller.py 记录 cached_tokens），隐式缓存已确认生效。
 
 ## 快速开始
 
