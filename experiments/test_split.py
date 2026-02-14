@@ -8,7 +8,6 @@
 
 import argparse
 import asyncio
-import html
 import json
 import time
 import sys
@@ -19,6 +18,7 @@ except Exception:
     pass
 
 from recursive_coder.api_caller import APICaller
+from tree_viz import save_tree_html, node_to_dict
 
 # ── prompts ──────────────────────────────────────────────────────────────────
 
@@ -138,95 +138,6 @@ async def build_tree(
     return node
 
 
-# ── HTML 可视化 ───────────────────────────────────────────────────────────────
-
-def tree_to_html(root: Node) -> str:
-    """生成可交互的 HTML 树。"""
-
-    def render_node(node: Node) -> str:
-        esc = html.escape(node.task)
-        reason = html.escape(node.judge_response)
-
-        if node.feasible:
-            color = "#22c55e"  # green
-            icon = "&#10004;"  # checkmark
-            tag = "YES"
-        elif node.is_leaf and not node.feasible:
-            color = "#f97316"  # orange (hit max depth)
-            icon = "&#9888;"   # warning
-            tag = "NO*"
-        else:
-            color = "#ef4444"  # red
-            icon = "&#10006;"  # cross
-            tag = "NO"
-
-        time_str = f"{node.judge_time:.1f}s"
-        if node.split_time:
-            time_str += f" + split {node.split_time:.1f}s"
-
-        node_html = f'''
-        <div class="node" style="border-left: 3px solid {color};">
-          <div class="header" onclick="this.parentElement.classList.toggle('collapsed')">
-            <span class="icon" style="color:{color}">{icon}</span>
-            <span class="tag" style="background:{color}">{tag}</span>
-            <span class="task">{esc}</span>
-            <span class="time">{time_str}</span>
-          </div>
-          <div class="reason">{reason}</div>
-        '''
-
-        if node.children:
-            node_html += '<div class="children">'
-            for child in node.children:
-                node_html += render_node(child)
-            node_html += '</div>'
-
-        node_html += '</div>'
-        return node_html
-
-    # 统计
-    def count_nodes(n: Node) -> dict:
-        stats = {"total": 1, "yes": 0, "no": 0, "time": n.judge_time + n.split_time}
-        if n.feasible:
-            stats["yes"] = 1
-        else:
-            stats["no"] = 1
-        for c in n.children:
-            cs = count_nodes(c)
-            stats["total"] += cs["total"]
-            stats["yes"] += cs["yes"]
-            stats["no"] += cs["no"]
-            stats["time"] += cs["time"]
-        return stats
-
-    stats = count_nodes(root)
-
-    return f'''<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Binary Split Tree</title>
-<style>
-  body {{ font-family: -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }}
-  h1 {{ color: #f8fafc; font-size: 18px; }}
-  .stats {{ color: #94a3b8; margin-bottom: 20px; font-size: 14px; }}
-  .node {{ margin: 4px 0 4px 20px; padding: 4px 8px; }}
-  .header {{ cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 4px 0; }}
-  .header:hover {{ background: #1e293b; border-radius: 4px; }}
-  .icon {{ font-size: 14px; width: 18px; text-align: center; }}
-  .tag {{ font-size: 11px; padding: 1px 6px; border-radius: 3px; color: white; font-weight: bold; }}
-  .task {{ flex: 1; font-size: 13px; }}
-  .time {{ font-size: 11px; color: #64748b; white-space: nowrap; }}
-  .reason {{ font-size: 11px; color: #64748b; margin: 2px 0 2px 26px; }}
-  .children {{ }}
-  .collapsed .children {{ display: none; }}
-  .collapsed .reason {{ display: none; }}
-  .root-task {{ color: #93c5fd; font-size: 14px; margin-bottom: 16px; padding: 8px; background: #1e293b; border-radius: 6px; }}
-</style></head><body>
-<h1>Binary Split Tree</h1>
-<div class="stats">Nodes: {stats["total"]} | Leaves YES: {stats["yes"]} | Leaves NO: {stats["no"]} | Total time: {stats["time"]:.1f}s</div>
-<div class="root-task">{html.escape(root.task)}</div>
-{render_node(root)}
-</body></html>'''
-
-
 # ── main ──────────────────────────────────────────────────────────────────────
 
 async def main():
@@ -257,9 +168,8 @@ async def main():
         print("=" * 70)
         print(f"Total time: {total:.1f}s")
         if root:
-            html_content = tree_to_html(root)
-            with open(args.output, "w", encoding="utf-8") as f:
-                f.write(html_content)
+            data = node_to_dict(root)
+            save_tree_html(data, args.output, title="二分分解树")
             print(f"Tree saved to: {args.output}")
 
 
