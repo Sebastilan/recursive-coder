@@ -15,8 +15,9 @@ L5: expression_eval— Build expression evaluator (tokenize→parse→compute)
                      Tests: deeper recursion, potential backtracking
 
 Usage:
-    DEEPSEEK_API_KEY=sk-xxx python eval/run_eval.py          # run all
-    DEEPSEEK_API_KEY=sk-xxx python eval/run_eval.py --level 1 # run only L1
+    DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py                    # run all (qwen-max)
+    DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py --level 1          # run only L1
+    DEEPSEEK_API_KEY=sk-xxx python eval/run_eval.py --model deepseek-v3 # use deepseek
 """
 
 from __future__ import annotations
@@ -219,7 +220,7 @@ class EvalResult:
     tree_repr: str = ""
 
 
-async def run_case(case: TestCase, eval_dir: Path, use_mock: bool = False) -> EvalResult:
+async def run_case(case: TestCase, eval_dir: Path, use_mock: bool = False, model: str = "qwen-max") -> EvalResult:
     """Run a single test case and return its evaluation result."""
     ws = eval_dir / f"L{case.level}_{case.name}"
     output_dir = ws / "output"
@@ -239,7 +240,7 @@ async def run_case(case: TestCase, eval_dir: Path, use_mock: bool = False) -> Ev
         from eval.mock_api import MockAPICaller
         api = MockAPICaller(scenario=f"L{case.level}", persistence=persistence)
     else:
-        api = APICaller(default_model="deepseek-v3", persistence=persistence)
+        api = APICaller(default_model=model, persistence=persistence)
 
     executor = Executor(
         workspace_dir=str(output_dir),
@@ -250,7 +251,7 @@ async def run_case(case: TestCase, eval_dir: Path, use_mock: bool = False) -> Ev
     evaluator = Evaluator(str(ws))
 
     config = {
-        "default_model": "deepseek-v3",
+        "default_model": model,
         "max_total_api_calls": case.max_api_calls,
         **case.config_overrides,
     }
@@ -400,10 +401,18 @@ def print_report(results: list[EvalResult]) -> str:
 
 # ── Main ───────────────────────────────────────────────────────────────────
 
-async def main(levels: list[int] | None = None, use_mock: bool = False):
+async def main(levels: list[int] | None = None, use_mock: bool = False, model: str = "qwen-max"):
     # Ensure API key (not needed for mock mode)
-    if not use_mock and not os.environ.get("DEEPSEEK_API_KEY"):
-        os.environ["DEEPSEEK_API_KEY"] = "sk-1abb4628c5ed45bf8b933ce86299e866"
+    if not use_mock:
+        from recursive_coder.api_caller import PRESET_MODELS
+        cfg = PRESET_MODELS.get(model)
+        if cfg is None:
+            print(f"Error: Unknown model '{model}'. Available: {', '.join(PRESET_MODELS)}")
+            sys.exit(1)
+        if not os.environ.get(cfg.api_key_env):
+            print(f"Error: Environment variable {cfg.api_key_env} not set for model '{model}'.")
+            print(f"Set it with: export {cfg.api_key_env}=your-key-here")
+            sys.exit(1)
 
     mode_label = "MOCK" if use_mock else "LIVE"
     eval_dir = Path("eval_runs") / f"{time.strftime('%Y%m%d_%H%M%S')}_{mode_label}"
@@ -419,7 +428,7 @@ async def main(levels: list[int] | None = None, use_mock: bool = False):
     results: list[EvalResult] = []
     for case in cases:
         print(f"  [{time.strftime('%H:%M:%S')}] L{case.level}: {case.name} — {case.description}")
-        result = await run_case(case, eval_dir, use_mock=use_mock)
+        result = await run_case(case, eval_dir, use_mock=use_mock, model=model)
         results.append(result)
         status = "PASS" if result.success else "FAIL"
         print(f"  [{time.strftime('%H:%M:%S')}] L{case.level}: {status} "
@@ -456,6 +465,7 @@ async def main(levels: list[int] | None = None, use_mock: bool = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run end-to-end evaluation")
     parser.add_argument("--level", type=int, nargs="+", help="Only run specific levels (1-5)")
+    parser.add_argument("--model", type=str, default="qwen-max", help="Model to use (default: qwen-max)")
     parser.add_argument("--mock", action="store_true", help="Use mock API (no network needed)")
     args = parser.parse_args()
-    asyncio.run(main(args.level, use_mock=args.mock))
+    asyncio.run(main(args.level, use_mock=args.mock, model=args.model))

@@ -59,6 +59,12 @@ PRESET_MODELS: dict[str, ModelConfig] = {
         api_key_env="DASHSCOPE_API_KEY",
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
     ),
+    "qwen-max": ModelConfig(
+        provider="openai_compatible",
+        model_name="qwen-max",
+        api_key_env="DASHSCOPE_API_KEY",
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    ),
 }
 
 
