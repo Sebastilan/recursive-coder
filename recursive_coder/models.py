@@ -29,8 +29,9 @@ class Verification:
 
     description: str
     command: str = ""               # shell command to run verification
-    expected_output: str = ""       # expected stdout (or file content)
-    compare_mode: str = "contains"  # "exact" | "contains" | "file_diff" | "returncode"
+    criteria: str = ""              # acceptance criteria (Agent writes tests based on this)
+    expected_output: str = ""       # deprecated: kept for backward compat
+    compare_mode: str = "returncode"  # always returncode now; Agent's test handles validation
 
 
 @dataclass
@@ -157,6 +158,7 @@ class TaskNode:
             "verification": {
                 "description": self.verification.description,
                 "command": self.verification.command,
+                "criteria": self.verification.criteria,
                 "expected_output": self.verification.expected_output,
                 "compare_mode": self.verification.compare_mode,
             } if self.verification else None,
@@ -189,8 +191,9 @@ class TaskNode:
             verification = Verification(
                 description=v["description"],
                 command=v.get("command", ""),
+                criteria=v.get("criteria", ""),
                 expected_output=v.get("expected_output", ""),
-                compare_mode=v.get("compare_mode", "contains"),
+                compare_mode=v.get("compare_mode", "returncode"),
             )
         dp = data.get("data_port", {})
         return cls(

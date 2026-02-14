@@ -7,7 +7,7 @@
 
 验证标准：
 - 说明：{verification_description}
-- 预期输出：{expected_output}
+- 验证条件：{verification_criteria}
 - 验证命令：{verification_command}
 
 执行失败，错误信息：
@@ -23,8 +23,9 @@
 你可以使用 shell、write_file、read_file、list_dir 工具。
 
 修复要求：
-1. 先用 read_file 查看相关代码文件
-2. 仔细分析错误原因（注意上面的接口定义，确保输出格式正确）
-3. 用 write_file 修改代码
+1. 先用 read_file 查看相关代码文件和测试脚本
+2. 仔细分析错误原因（注意接口定义，确保输出格式正确）
+3. 用 write_file 修改代码或测试脚本
 4. 用 shell 重新运行验证命令
-5. 通过后调用 task_done 声明完成
+5. 验证命令的测试脚本 exit code = 0 表示通过，非0 表示失败
+6. 通过后调用 task_done 声明完成

@@ -12,7 +12,7 @@
 
 判断标准：
 - 任务足够具体，一次编码即可完成
-- 给定上面的输入数据，你能明确预测输出结果
+- 你能定义清晰的验证标准（成功条件）
 - 能写出验证命令（如 python test.py）
 
 你必须将结果包裹在 <json> 标签中，严格按以下格式返回：
@@ -34,9 +34,8 @@
   }},
   "verification": {{
     "description": "验证内容说明",
-    "expected_output": "基于上述输入数据的预期输出（具体值）",
-    "command": "验证命令，如 python test_xxx.py",
-    "compare_mode": "contains"
+    "criteria": "验证标准（描述需要验证的性质和条件，不要预测具体数值。Agent 会据此编写测试脚本，测试通过返回 exit code 0）",
+    "command": "验证命令，如 python test_xxx.py"
   }},
   "data_port": {{
     "input_description": "该任务接收什么",
@@ -78,3 +77,4 @@
 - 子任务的输入数据必须可追溯到本任务的输入数据，不要凭空编造测试数据。
 - interface_contract 是子任务之间的协作契约，必须具体到数据格式和示例，不要写空泛的描述。
 - execution_plan 要具体到文件名、函数名、参数类型，让 Agent 拿到后可以直接按步骤执行。
+- verification.criteria 要描述验证性质（如"输出包含所有单词及其频次"、"返回值为整数42"），不要预测具体答案。Agent 会根据 criteria 编写测试，测试脚本必须在验证通过时 exit 0、失败时 exit 非0。

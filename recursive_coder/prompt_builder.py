@@ -178,7 +178,7 @@ class PromptBuilder:
             execution_plan_section=execution_plan_section,
             interface_section=interface_section,
             verification_description=v.description if v else "",
-            expected_output=v.expected_output if v else "",
+            verification_criteria=v.criteria if v else "",
             verification_command=v.command if v else "",
             context_section=context_section,
         )
@@ -200,7 +200,7 @@ class PromptBuilder:
             ancestry_section=ancestry_section,
             interface_section=interface_section,
             verification_description=v.description if v else "",
-            expected_output=v.expected_output if v else "",
+            verification_criteria=v.criteria if v else "",
             verification_command=v.command if v else "",
             error_info=error_info,
             error_history_section=error_history_section,

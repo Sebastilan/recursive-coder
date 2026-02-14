@@ -135,9 +135,10 @@ class RecursiveProcessor:
         if parsed.can_verify:
             task.verification = Verification(
                 description=parsed.verification_description,
-                expected_output=parsed.expected_output,
+                criteria=parsed.verification_criteria,
                 command=parsed.verification_command,
-                compare_mode=parsed.compare_mode,
+                expected_output=parsed.expected_output,
+                compare_mode="returncode",
             )
             if parsed.data_port:
                 dp = parsed.data_port
@@ -405,18 +406,16 @@ class RecursiveProcessor:
 
                 passed = self._check_verification(task, vresult)
                 logger.info(
-                    "[VERIFY] task=%s attempt=%d passed=%s mode=%s cmd='%s' rc=%d",
+                    "[VERIFY] task=%s attempt=%d passed=%s cmd='%s' rc=%d",
                     task.id, attempt, passed,
-                    task.verification.compare_mode,
                     task.verification.command[:60],
                     vresult.returncode,
                 )
                 if not passed:
                     logger.debug(
-                        "[VERIFY] task=%s expected='%s' actual='%s'",
+                        "[VERIFY] task=%s output='%s'",
                         task.id,
-                        task.verification.expected_output[:200],
-                        (vresult.stdout or vresult.stderr)[:200],
+                        (vresult.stdout or vresult.stderr)[:300],
                     )
 
                 if passed:
@@ -462,26 +461,8 @@ class RecursiveProcessor:
         )
 
     def _check_verification(self, task: TaskNode, result) -> bool:
-        """Compare execution result against verification criteria."""
-        v = task.verification
-        if not v:
-            return result.returncode == 0
-
-        mode = v.compare_mode
-        expected = v.expected_output.strip()
-        actual_stdout = result.stdout.strip()
-
-        if mode == "returncode":
-            return result.returncode == 0
-        elif mode == "exact":
-            return actual_stdout == expected
-        elif mode == "contains":
-            return expected in actual_stdout
-        elif mode == "file_diff":
-            # Gap 5c: Compare output file against expected output file
-            return self._check_file_diff(task)
-        else:
-            return result.returncode == 0
+        """Check verification result — Agent's test script should exit 0 on success."""
+        return result.returncode == 0
 
     # ── Gap 5c: file_diff implementation ──
 

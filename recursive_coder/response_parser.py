@@ -20,9 +20,10 @@ class JudgeResult:
 
     # if can_verify == True (leaf task planning)
     verification_description: str = ""
-    expected_output: str = ""
+    verification_criteria: str = ""
     verification_command: str = ""
-    compare_mode: str = "contains"
+    expected_output: str = ""       # deprecated, kept for backward compat
+    compare_mode: str = "returncode"
     data_port: dict = field(default_factory=dict)
     implementation_hint: str = ""
     execution_plan: list[str] = field(default_factory=list)   # step-by-step plan
@@ -97,9 +98,11 @@ def parse_judge_response(text: str) -> JudgeResult:
     if result.can_verify:
         v = data.get("verification", {})
         result.verification_description = v.get("description", "")
-        result.expected_output = v.get("expected_output", "")
+        result.verification_criteria = v.get("criteria", "")
         result.verification_command = v.get("command", "")
-        result.compare_mode = v.get("compare_mode", "contains")
+        # backward compat: if old-style expected_output exists, keep it
+        result.expected_output = v.get("expected_output", "")
+        result.compare_mode = v.get("compare_mode", "returncode")
         result.data_port = data.get("data_port", {})
         result.implementation_hint = data.get("implementation_hint", "")
         result.execution_plan = data.get("execution_plan", [])
