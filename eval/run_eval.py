@@ -15,7 +15,7 @@ L5: expression_eval— Build expression evaluator (tokenize→parse→compute)
                      Tests: deeper recursion, potential backtracking
 
 Usage:
-    DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py                    # run all (qwen-max)
+    DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py                    # run all (qwen-plus)
     DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py --level 1          # run only L1
     DEEPSEEK_API_KEY=sk-xxx python eval/run_eval.py --model deepseek-v3 # use deepseek
 """
@@ -220,7 +220,7 @@ class EvalResult:
     tree_repr: str = ""
 
 
-async def run_case(case: TestCase, eval_dir: Path, use_mock: bool = False, model: str = "qwen-max") -> EvalResult:
+async def run_case(case: TestCase, eval_dir: Path, use_mock: bool = False, model: str = "qwen-plus") -> EvalResult:
     """Run a single test case and return its evaluation result."""
     ws = eval_dir / f"L{case.level}_{case.name}"
     output_dir = ws / "output"
@@ -401,7 +401,7 @@ def print_report(results: list[EvalResult]) -> str:
 
 # ── Main ───────────────────────────────────────────────────────────────────
 
-async def main(levels: list[int] | None = None, use_mock: bool = False, model: str = "qwen-max"):
+async def main(levels: list[int] | None = None, use_mock: bool = False, model: str = "qwen-plus"):
     # Ensure API key (not needed for mock mode)
     if not use_mock:
         from recursive_coder.api_caller import PRESET_MODELS
@@ -465,7 +465,7 @@ async def main(levels: list[int] | None = None, use_mock: bool = False, model: s
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run end-to-end evaluation")
     parser.add_argument("--level", type=int, nargs="+", help="Only run specific levels (1-5)")
-    parser.add_argument("--model", type=str, default="qwen-max", help="Model to use (default: qwen-max)")
+    parser.add_argument("--model", type=str, default="qwen-plus", help="Model to use (default: qwen-max)")
     parser.add_argument("--mock", action="store_true", help="Use mock API (no network needed)")
     args = parser.parse_args()
     asyncio.run(main(args.level, use_mock=args.mock, model=args.model))
