@@ -17,6 +17,8 @@ L6: multi_file_stats— Multi-file text analysis pipeline (3 modules + orchestra
                      Tests: forced decomposition, inter-module data flow, integration
 L7: query_engine    — Mini CSV query engine (4 modules, complex data flow)
                      Tests: 2-level decomposition, dependency ordering, integration
+L8: cutting_stock_cg— Column generation for cutting stock (knapsack+LP+CG loop)
+                     Tests: genuine complexity forcing decomposition, algorithm correctness
 
 Usage:
     DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py                    # run all (qwen-plus)
@@ -317,6 +319,92 @@ CASES: list[TestCase] = [
         config_overrides={"max_depth": 5, "max_retries": 3, "max_agent_steps": 25},
         max_api_calls=200,
     ),
+
+    # ── L8: Column Generation for Cutting Stock (genuinely complex) ──
+    TestCase(
+        level=8,
+        name="cutting_stock_cg",
+        description="Column generation for cutting stock problem. Genuinely complex, should trigger decomposition.",
+        task_text=(
+            "Implement a Column Generation solver for the Cutting Stock Problem.\n\n"
+            "Problem: Given stock rolls of fixed length L, and a set of piece types each with\n"
+            "a required length and demand quantity, find the minimum number of stock rolls\n"
+            "needed to satisfy all demands. Each roll can be cut into multiple pieces as long\n"
+            "as their total length does not exceed L.\n\n"
+            "Algorithm overview (Column Generation):\n"
+            "1. Start with initial cutting patterns (one piece type per pattern, packed maximally)\n"
+            "2. Solve the LP relaxation of the master problem to get dual prices\n"
+            "3. Solve the pricing subproblem (unbounded knapsack) to find a new pattern with\n"
+            "   negative reduced cost (i.e., knapsack objective value > 1)\n"
+            "4. If found, add the new pattern and go to step 2\n"
+            "5. If not found, the LP relaxation is optimal — output the result\n\n"
+            "You MUST implement these as SEPARATE Python modules:\n\n"
+            "Module 1 - knapsack.py:\n"
+            "  Solve the unbounded knapsack problem using dynamic programming.\n"
+            "  Function: solve_knapsack(values: list[float], weights: list[int], capacity: int)\n"
+            "            -> tuple[float, list[int]]\n"
+            "  Returns (optimal_value, item_counts) where item_counts[i] is how many of item i to take.\n"
+            "  This is used as the pricing subproblem: values = dual prices, weights = piece lengths,\n"
+            "  capacity = stock length.\n\n"
+            "Module 2 - lp_master.py:\n"
+            "  Solve the master LP relaxation using scipy.optimize.linprog.\n"
+            "  Function: solve_master(patterns: list[list[int]], demands: list[int])\n"
+            "            -> tuple[float, list[float], list[float]]\n"
+            "  Input: patterns is a list of cutting patterns (each pattern is a list of counts per piece type),\n"
+            "         demands is the demand for each piece type.\n"
+            "  Returns (objective_value, solution_x, dual_prices).\n"
+            "  The LP is: minimize sum(x_j) subject to A @ x >= demands, x >= 0,\n"
+            "  where column j of A is pattern j.\n"
+            "  Use scipy.optimize.linprog with A_ub=-A^T (transposed and negated) and b_ub=-demands.\n"
+            "  Extract dual prices from result.ineqlin.marginals (negate them since constraints were flipped).\n\n"
+            "Module 3 - column_generation.py:\n"
+            "  The main column generation loop.\n"
+            "  Function: solve_cutting_stock(stock_length: int, pieces: list[dict]) -> dict\n"
+            "  Input: stock_length and pieces (each with 'length' and 'demand' keys).\n"
+            "  Steps:\n"
+            "    a. Generate initial patterns: for each piece type i, create a pattern with\n"
+            "       floor(stock_length / piece_length_i) copies of piece i and 0 for others.\n"
+            "    b. Loop: solve master LP -> get duals -> solve knapsack pricing -> if value > 1+eps,\n"
+            "       add new pattern and repeat; else break.\n"
+            "    c. Return dict with: 'lp_value', 'patterns', 'solution', 'iterations', 'converged'.\n\n"
+            "Module 4 - main.py:\n"
+            "  Read input from data/problem.json, call solve_cutting_stock, write results\n"
+            "  to output/result.txt AND print to stdout.\n"
+            "  Output format must include lines like:\n"
+            "    LP Optimal Value: <value>\n"
+            "    Converged after <N> iterations\n"
+            "    Pattern [a1, a2, ...]: <usage> rolls\n\n"
+            "IMPORTANT:\n"
+            "- Each module MUST be in a separate .py file\n"
+            "- scipy is available for LP solving\n"
+            "- The knapsack solver must use DP, not brute force\n"
+            "- Use tolerance eps=1e-6 for convergence check\n"
+        ),
+        data_port=DataPort(
+            input_description="JSON file with stock_length and pieces array",
+            input_files=["data/problem.json"],
+            output_files=["output/result.txt"],
+        ),
+        setup_files={
+            "data/problem.json": (
+                '{\n'
+                '    "stock_length": 100,\n'
+                '    "pieces": [\n'
+                '        {"length": 45, "demand": 10},\n'
+                '        {"length": 36, "demand": 20},\n'
+                '        {"length": 31, "demand": 15}\n'
+                '    ]\n'
+                '}\n'
+            ),
+        },
+        # LP optimal = 18.75 (hand-verified):
+        # Initial patterns: [2,0,0],[0,2,0],[0,0,3] -> LP=20, duals=[0.5,0.5,0.333]
+        # Pricing finds [0,1,2] (value=1.167>1) -> add
+        # New LP=18.75, duals=[0.5,0.5,0.25] -> no improving pattern -> converged
+        expected_check="contains:18.75",
+        config_overrides={"max_depth": 5, "max_retries": 3, "max_agent_steps": 25},
+        max_api_calls=200,
+    ),
 ]
 
 
@@ -583,7 +671,7 @@ async def main(levels: list[int] | None = None, use_mock: bool = False, model: s
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run end-to-end evaluation")
-    parser.add_argument("--level", type=int, nargs="+", help="Only run specific levels (1-7)")
+    parser.add_argument("--level", type=int, nargs="+", help="Only run specific levels (1-8)")
     parser.add_argument("--model", type=str, default="qwen-plus", help="Model to use (default: qwen-max)")
     parser.add_argument("--mock", action="store_true", help="Use mock API (no network needed)")
     args = parser.parse_args()
