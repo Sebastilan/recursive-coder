@@ -271,6 +271,27 @@ body {
   margin-bottom: 12px;
 }
 
+/* ── 子任务可点击 ── */
+.child-item {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: #0f172a;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.2s, background 0.2s;
+  line-height: 1.5;
+}
+.child-item:hover {
+  border-color: #6366f1;
+  background: #162032;
+}
+.child-item .child-label {
+  margin-top: 4px;
+  color: #cbd5e1;
+}
+
 /* ── 提示 ── */
 .hint {
   position: fixed;
@@ -342,8 +363,15 @@ svg.call(zoom);
 
 // ── D3 树 ──
 const root = d3.hierarchy(treeData, d => d.children);
+
+// 给每个节点分配唯一 ID
+root.descendants().forEach((d, i) => { d.data._id = i; });
+
 const treeLayout = d3.tree().nodeSize([NODE_W, NODE_H]);
 treeLayout(root);
+
+// 节点映射表（ID → d3 节点 + DOM 元素）
+const nodeRef = {};
 
 // 初始居中
 const initialX = width / 2;
@@ -395,6 +423,9 @@ nodes.each(function(d) {
     d3.select(this).classed("active", true);
     showDetail(d.data);
   });
+
+  // 存储引用
+  nodeRef[d.data._id] = { d3Node: d, dom: div.node() };
 });
 
 // ── 详情面板 ──
@@ -425,12 +456,13 @@ function showDetail(data) {
   html += '</div>';
 
   if (data.children && data.children.length) {
-    html += '<h3>子任务 (' + data.children.length + ')</h3>';
+    html += '<h3>子任务 (' + data.children.length + ')  <span style="font-size:11px;color:#64748b;font-weight:400">点击跳转</span></h3>';
     data.children.forEach(function(c, i) {
       const cs = STATUS[c.status] || STATUS.no;
-      html += '<div style="margin:6px 0;padding:6px 8px;background:#0f172a;border-radius:4px;font-size:12px;">';
+      html += '<div class="child-item" onclick="navigateToNode(' + c._id + ')">';
       html += '<span class="badge badge-' + c.status + '" style="margin-right:6px">' + cs.text + '</span>';
-      html += escapeHtml(c.label.length > 60 ? c.label.slice(0, 60) + "\u2026" : c.label);
+      html += '<span class="node-time" style="margin-left:4px">' + (c.time || 0).toFixed(1) + 's</span>';
+      html += '<div class="child-label">' + escapeHtml(c.label) + '</div>';
       html += '</div>';
     });
   }
@@ -442,6 +474,25 @@ function showDetail(data) {
 function closeDetail() {
   document.getElementById("detail").classList.remove("open");
   d3.selectAll(".node-box").classed("active", false);
+}
+
+function navigateToNode(id) {
+  const ref = nodeRef[id];
+  if (!ref) return;
+
+  // 高亮目标节点
+  d3.selectAll(".node-box").classed("active", false);
+  d3.select(ref.dom).classed("active", true);
+
+  // 平滑移动到目标节点（居中显示）
+  const d = ref.d3Node;
+  svg.transition().duration(500).call(
+    zoom.transform,
+    d3.zoomIdentity.translate(width / 2 - d.x, height / 2 - d.y)
+  );
+
+  // 显示目标节点详情
+  showDetail(d.data);
 }
 
 // 点击空白关闭面板
