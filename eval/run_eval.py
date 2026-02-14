@@ -932,7 +932,11 @@ async def main(levels: list[int] | None = None, use_mock: bool = False, model: s
         print()
 
     report = print_report(results)
-    print(report)
+    # Windows GBK console can't print Unicode chars like \u2212 (minus sign)
+    try:
+        print(report)
+    except UnicodeEncodeError:
+        print(report.encode(sys.stdout.encoding or "utf-8", errors="replace").decode(sys.stdout.encoding or "utf-8", errors="replace"))
 
     # Save report
     report_path = eval_dir / "eval_report.txt"

@@ -68,9 +68,11 @@ class RecursiveProcessor:
 
     async def run(self, task_description: str, data_port: Optional[DataPort] = None) -> TaskTree:
         """Accept a task description (+ optional data port), build and execute the tree."""
+        max_attempts = self.cfg.get("max_retries", 2) + 1  # retries + initial attempt
         root = TaskNode(
             description=task_description,
             data_port=data_port or DataPort(),
+            max_attempts=max_attempts,
         )
         self.tree.add_node(root)
         self.persistence.save_tree(self.tree)
@@ -663,11 +665,13 @@ class RecursiveProcessor:
 
         for i, sd in enumerate(subtask_defs):
             dp_data = sd.get("data_port", {})
+            max_attempts = self.cfg.get("max_retries", 2) + 1
             child = TaskNode(
                 description=sd["description"],
                 parent_id=parent.id,
                 depth=parent.depth + 1,
                 context_files=sd.get("context_files", []),
+                max_attempts=max_attempts,
                 # Propagate parent's interface_contract to child
                 interface_contract=parent.interface_contract,
                 data_port=DataPort(
