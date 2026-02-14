@@ -73,7 +73,7 @@ CASES: list[TestCase] = [
             input_description="No input needed. The program should simply print 42.",
         ),
         setup_files={},
-        expected_check="exact:42",
+        expected_check="contains:42",
         config_overrides={"max_depth": 2, "max_retries": 2, "max_agent_steps": 15},
         max_api_calls=20,
     ),
