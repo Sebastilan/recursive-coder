@@ -19,6 +19,10 @@ L7: query_engine    — Mini CSV query engine (4 modules, complex data flow)
                      Tests: 2-level decomposition, dependency ordering, integration
 L8: cutting_stock_cg— Column generation for cutting stock (knapsack+LP+CG loop)
                      Tests: genuine complexity forcing decomposition, algorithm correctness
+L9: cvrp_solver     — CVRP nearest-neighbor + 2-opt (5 modules, low max_agent_steps)
+                     Tests: escalation decomposition path (LEAF fail → re-judge → decompose)
+L10: vrp_benchmark  — Multi-instance VRP batch runner (2 formats, 2 algorithms, report)
+                     Tests: complex instruction following, escalation decomposition
 
 Usage:
     DASHSCOPE_API_KEY=sk-xxx python eval/run_eval.py                    # run all (qwen-plus)
@@ -405,6 +409,290 @@ CASES: list[TestCase] = [
         config_overrides={"max_depth": 5, "max_retries": 3, "max_agent_steps": 25},
         max_api_calls=200,
     ),
+
+    # ── L9: CVRP solver — test escalation decomposition path ──
+    TestCase(
+        level=9,
+        name="cvrp_solver",
+        description="CVRP nearest-neighbor + 2-opt. Low max_agent_steps to trigger escalation decomposition.",
+        task_text=(
+            "Solve the Capacitated Vehicle Routing Problem (CVRP) using a Nearest Neighbor\n"
+            "heuristic followed by 2-opt local search improvement.\n\n"
+            "Input: data/instance.vrp in TSPLIB format (EUC_2D type).\n"
+            "The file contains: NODE_COORD_SECTION (node coordinates), DEMAND_SECTION\n"
+            "(customer demands), CAPACITY (vehicle capacity), depot is node 1.\n\n"
+            "Implement these SEPARATE modules:\n\n"
+            "Module 1 - vrp_parser.py:\n"
+            "  Parse TSPLIB .vrp file format.\n"
+            "  Function: parse_vrp(filepath) -> dict with keys:\n"
+            "    'name', 'dimension', 'capacity', 'coords' (dict: node_id -> (x,y)),\n"
+            "    'demands' (dict: node_id -> demand), 'depot' (int)\n"
+            "  Distances are Euclidean (round to nearest integer as per TSPLIB convention).\n\n"
+            "Module 2 - distance.py:\n"
+            "  Compute and cache the distance matrix.\n"
+            "  Function: compute_distance_matrix(coords: dict) -> dict[tuple, int]\n"
+            "  Use Euclidean distance rounded to nearest integer: round(sqrt((x1-x2)^2 + (y1-y2)^2))\n\n"
+            "Module 3 - nn_solver.py:\n"
+            "  Nearest Neighbor construction heuristic for CVRP.\n"
+            "  Function: nearest_neighbor(dist_matrix, demands, capacity, depot, n_nodes) -> list[list[int]]\n"
+            "  Returns list of routes (each route is a list of customer node IDs, NOT including depot).\n"
+            "  Algorithm: repeatedly pick the nearest unvisited customer that fits in current vehicle capacity.\n"
+            "  When no more customers fit, start a new route.\n\n"
+            "Module 4 - two_opt.py:\n"
+            "  2-opt local search improvement for each route.\n"
+            "  Function: improve_routes(routes, dist_matrix, depot) -> list[list[int]]\n"
+            "  For each route, try all 2-opt swaps within the route. Accept if distance improves.\n"
+            "  Repeat until no improvement found.\n\n"
+            "Module 5 - main.py:\n"
+            "  Read data/instance.vrp, build distance matrix, run NN + 2-opt, validate solution\n"
+            "  (all customers visited exactly once, each route respects capacity), compute total distance.\n"
+            "  Write to output/solution.txt AND print to stdout:\n"
+            "    Instance: <name>\n"
+            "    Known optimal: 375\n"
+            "    Heuristic solution: <total_distance>\n"
+            "    Gap: <percentage>%\n"
+            "    Number of routes: <k>\n"
+            "    Routes:\n"
+            "      Route 1: depot -> c1 -> c2 -> ... -> depot (distance: X, load: Y/CAP)\n"
+            "      ...\n\n"
+            "IMPORTANT: Each module in a separate .py file. Use integer distances (TSPLIB convention)."
+        ),
+        data_port=DataPort(
+            input_description="A TSPLIB .vrp file with EUC_2D coordinates for 22-node CVRP instance",
+            input_files=["data/instance.vrp"],
+            output_files=["output/solution.txt"],
+        ),
+        setup_files={
+            "data/instance.vrp": (
+                "NAME : E-n22-k4\n"
+                "COMMENT : (Christophides and Eilon, Min no of trucks: 4, Optimal value: 375)\n"
+                "TYPE : CVRP\n"
+                "DIMENSION : 22\n"
+                "EDGE_WEIGHT_TYPE : EUC_2D\n"
+                "CAPACITY : 6000\n"
+                "NODE_COORD_SECTION\n"
+                "1 145 215\n"
+                "2 151 264\n"
+                "3 159 261\n"
+                "4 130 254\n"
+                "5 128 252\n"
+                "6 163 247\n"
+                "7 146 246\n"
+                "8 161 242\n"
+                "9 142 239\n"
+                "10 163 236\n"
+                "11 148 232\n"
+                "12 128 231\n"
+                "13 156 217\n"
+                "14 129 214\n"
+                "15 146 208\n"
+                "16 164 208\n"
+                "17 141 206\n"
+                "18 147 193\n"
+                "19 164 193\n"
+                "20 129 189\n"
+                "21 155 185\n"
+                "22 139 182\n"
+                "DEMAND_SECTION\n"
+                "1 0\n"
+                "2 1100\n"
+                "3 700\n"
+                "4 800\n"
+                "5 1400\n"
+                "6 2100\n"
+                "7 400\n"
+                "8 800\n"
+                "9 100\n"
+                "10 500\n"
+                "11 600\n"
+                "12 1200\n"
+                "13 1300\n"
+                "14 1300\n"
+                "15 300\n"
+                "16 900\n"
+                "17 2100\n"
+                "18 1000\n"
+                "19 900\n"
+                "20 2500\n"
+                "21 1800\n"
+                "22 700\n"
+                "DEPOT_SECTION\n"
+                " 1\n"
+                " -1\n"
+                "EOF\n"
+            ),
+        },
+        expected_check="contains:375",  # output must reference the known optimal value
+        config_overrides={
+            "max_depth": 5,
+            "max_retries": 1,        # only 1 retry before escalation
+            "max_agent_steps": 12,   # 12 steps not enough for 5 modules → fail → escalate
+        },
+        max_api_calls=200,
+    ),
+
+    # ── L10: Multi-instance VRP benchmark runner ──
+    TestCase(
+        level=10,
+        name="vrp_benchmark",
+        description="Multi-instance VRP batch runner. 2 formats, 2 algorithms, comparison report.",
+        task_text=(
+            "Build a VRP benchmark runner that processes multiple CVRP instances and generates\n"
+            "a comparison report.\n\n"
+            "Input files:\n"
+            "  - data/instances/E-n13-k4.vrp (EXPLICIT distance format, 12 customers, optimal=290)\n"
+            "  - data/instances/E-n22-k4.vrp (EUC_2D format, 21 customers, optimal=375)\n"
+            "  - data/config.json (specifies which algorithm to run and report format)\n\n"
+            "Implement these modules:\n\n"
+            "Module 1 - vrp_parser.py:\n"
+            "  Parse TSPLIB .vrp files. Must handle BOTH EUC_2D (coordinate-based) and EXPLICIT\n"
+            "  (lower-triangular distance matrix) formats.\n"
+            "  Function: parse_vrp(filepath) -> dict\n"
+            "  For EUC_2D: compute integer Euclidean distances from coordinates.\n"
+            "  For EXPLICIT: read the lower-triangular matrix directly.\n\n"
+            "Module 2 - solvers.py:\n"
+            "  Implement two CVRP heuristics:\n"
+            "  a) nearest_neighbor(instance) -> solution dict\n"
+            "  b) savings_algorithm(instance) -> solution dict (Clarke-Wright parallel savings)\n"
+            "  Each returns: {'routes': [...], 'total_distance': int, 'n_vehicles': int}\n\n"
+            "Module 3 - reporter.py:\n"
+            "  Generate comparison report.\n"
+            "  Function: generate_report(results: list[dict], output_dir: str)\n"
+            "  Write output/report.csv with columns:\n"
+            "    instance, algorithm, total_distance, n_vehicles, optimal, gap_percent\n"
+            "  Write output/summary.txt with:\n"
+            "    - Best algorithm for each instance (lowest gap)\n"
+            "    - Overall average gap per algorithm\n"
+            "    - Recommendation: which algorithm to use\n\n"
+            "Module 4 - main.py:\n"
+            "  Read config.json, for each instance run all specified algorithms,\n"
+            "  collect results, generate report.\n\n"
+            "IMPORTANT: Each module in a separate .py file.\n"
+            "The savings algorithm must correctly compute savings s(i,j) = d(0,i) + d(0,j) - d(i,j)\n"
+            "and merge routes respecting capacity constraints."
+        ),
+        data_port=DataPort(
+            input_description="Two TSPLIB .vrp files (EUC_2D and EXPLICIT formats) plus a config.json",
+            input_files=[
+                "data/instances/E-n13-k4.vrp",
+                "data/instances/E-n22-k4.vrp",
+                "data/config.json",
+            ],
+            output_files=["output/report.csv", "output/summary.txt"],
+        ),
+        setup_files={
+            "data/instances/E-n13-k4.vrp": (
+                "NAME : eil13\n"
+                "COMMENT : (Eilon et al, Min no of trucks: 4, Best value: 290)\n"
+                "TYPE : CVRP\n"
+                "DIMENSION : 13\n"
+                "EDGE_WEIGHT_TYPE : EXPLICIT\n"
+                "EDGE_WEIGHT_FORMAT: LOWER_ROW \n"
+                "DISPLAY_DATA_TYPE: NO_DISPLAY\n"
+                "CAPACITY : 6000\n"
+                "EDGE_WEIGHT_SECTION\n"
+                "     9    14    21    23    22    25    32    36    38    42\n"
+                "    50    52     5    12    22    21    24    31    35    37\n"
+                "    41    49    51     7    17    16    23    26    30    36\n"
+                "    36    44    46    10    21    30    27    37    43    31\n"
+                "    37    39    19    28    25    35    41    29    31    29\n"
+                "     9    10    16    22    20    28    30     7    11    13\n"
+                "    17    25    27    10    16    10    18    20     6     6\n"
+                "    14    16    12    12    20     8    10    10\n"
+                "DEMAND_SECTION\n"
+                "1 0\n"
+                "2 1200\n"
+                "3 1700\n"
+                "4 1500\n"
+                "5 1400\n"
+                "6 1700\n"
+                "7 1400\n"
+                "8 1200\n"
+                "9 1900\n"
+                "10 1800\n"
+                "11 1600\n"
+                "12 1700\n"
+                "13 1100\n"
+                "DEPOT_SECTION\n"
+                "1\n"
+                "-1\n"
+                "EOF\n"
+            ),
+            "data/instances/E-n22-k4.vrp": (
+                "NAME : E-n22-k4\n"
+                "COMMENT : (Christophides and Eilon, Min no of trucks: 4, Optimal value: 375)\n"
+                "TYPE : CVRP\n"
+                "DIMENSION : 22\n"
+                "EDGE_WEIGHT_TYPE : EUC_2D\n"
+                "CAPACITY : 6000\n"
+                "NODE_COORD_SECTION\n"
+                "1 145 215\n"
+                "2 151 264\n"
+                "3 159 261\n"
+                "4 130 254\n"
+                "5 128 252\n"
+                "6 163 247\n"
+                "7 146 246\n"
+                "8 161 242\n"
+                "9 142 239\n"
+                "10 163 236\n"
+                "11 148 232\n"
+                "12 128 231\n"
+                "13 156 217\n"
+                "14 129 214\n"
+                "15 146 208\n"
+                "16 164 208\n"
+                "17 141 206\n"
+                "18 147 193\n"
+                "19 164 193\n"
+                "20 129 189\n"
+                "21 155 185\n"
+                "22 139 182\n"
+                "DEMAND_SECTION\n"
+                "1 0\n"
+                "2 1100\n"
+                "3 700\n"
+                "4 800\n"
+                "5 1400\n"
+                "6 2100\n"
+                "7 400\n"
+                "8 800\n"
+                "9 100\n"
+                "10 500\n"
+                "11 600\n"
+                "12 1200\n"
+                "13 1300\n"
+                "14 1300\n"
+                "15 300\n"
+                "16 900\n"
+                "17 2100\n"
+                "18 1000\n"
+                "19 900\n"
+                "20 2500\n"
+                "21 1800\n"
+                "22 700\n"
+                "DEPOT_SECTION\n"
+                " 1\n"
+                " -1\n"
+                "EOF\n"
+            ),
+            "data/config.json": (
+                '{\n'
+                '    "algorithms": ["nearest_neighbor", "savings"],\n'
+                '    "instances_dir": "data/instances",\n'
+                '    "output_dir": "output",\n'
+                '    "optimals": {"E-n13-k4": 290, "E-n22-k4": 375}\n'
+                '}\n'
+            ),
+        },
+        expected_check="contains:290",  # E-n13-k4 optimal must appear in report
+        config_overrides={
+            "max_depth": 5,
+            "max_retries": 1,
+            "max_agent_steps": 15,   # 2 instances + 2 algorithms + report → not enough
+        },
+        max_api_calls=250,
+    ),
 ]
 
 
@@ -671,7 +959,7 @@ async def main(levels: list[int] | None = None, use_mock: bool = False, model: s
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run end-to-end evaluation")
-    parser.add_argument("--level", type=int, nargs="+", help="Only run specific levels (1-8)")
+    parser.add_argument("--level", type=int, nargs="+", help="Only run specific levels (1-10)")
     parser.add_argument("--model", type=str, default="qwen-plus", help="Model to use (default: qwen-max)")
     parser.add_argument("--mock", action="store_true", help="Use mock API (no network needed)")
     args = parser.parse_args()
