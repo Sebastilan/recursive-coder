@@ -13,6 +13,10 @@ import json
 import time
 import sys
 sys.path.insert(0, ".")
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 from recursive_coder.api_caller import APICaller
 
@@ -242,18 +246,21 @@ async def main():
     print("=" * 70)
 
     api = APICaller()
+    root = None
     t0 = time.monotonic()
-    root = await build_tree(api, args.task, args.model, max_depth=args.max_depth)
-    total = time.monotonic() - t0
-
-    print("=" * 70)
-    print(f"Total time: {total:.1f}s")
-
-    # 保存 HTML
-    html_content = tree_to_html(root)
-    with open(args.output, "w", encoding="utf-8") as f:
-        f.write(html_content)
-    print(f"Tree saved to: {args.output}")
+    try:
+        root = await build_tree(api, args.task, args.model, max_depth=args.max_depth)
+    except Exception as e:
+        print(f"\nError: {e}")
+    finally:
+        total = time.monotonic() - t0
+        print("=" * 70)
+        print(f"Total time: {total:.1f}s")
+        if root:
+            html_content = tree_to_html(root)
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(html_content)
+            print(f"Tree saved to: {args.output}")
 
 
 if __name__ == "__main__":
