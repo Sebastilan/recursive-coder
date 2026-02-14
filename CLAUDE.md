@@ -2,21 +2,22 @@
 
 ## 当前状态
 
-项目已开发完成，55 个单元测试全部通过，可以本地用 API 跑了。
+L1-L5 端到端测试全部通过（qwen-plus 模型，远程机 DESKTOP-CFEOJ9J）。
+验证机制已重构为 criteria-based（Agent 自写测试脚本，Framework 只检查 returncode）。
 
 ## 快速开始
 
-1. 设置 API Key（默认模型 deepseek-v3）：
+1. 设置 API Key（默认模型 qwen-plus）：
 
 ```bash
-export DEEPSEEK_API_KEY="sk-..."
+export DASHSCOPE_API_KEY="sk-..."
 ```
 
 其他模型对应的环境变量：
 - Claude: `ANTHROPIC_API_KEY`
 - GPT: `OPENAI_API_KEY`
 - Gemini: `GOOGLE_API_KEY`
-- Qwen: `DASHSCOPE_API_KEY`
+- DeepSeek: `DEEPSEEK_API_KEY`
 
 2. 运行：
 
@@ -25,7 +26,7 @@ cd recursive-coder
 python -m recursive_coder --project-dir . run "任务描述" --verbose
 ```
 
-3. 切换模型：`--model claude-sonnet` / `gpt-4.1-mini` / `gemini-2.5-flash` / `qwen3-coder`
+3. 切换模型：`--model qwen-plus` / `qwen-max` / `deepseek-v3` / `claude-sonnet` / `gpt-4.1-mini`
 
 ## 常用命令
 
@@ -69,3 +70,12 @@ python eval/run_eval.py --mock
 - `max_retries: 3` — 单任务最大重试
 - `max_total_api_calls: 500` — API 调用总量上限
 - `command_timeout: 60` — 命令执行超时（秒）
+
+## 已踩过的坑
+
+1. **Windows \r\n 问题**：Agent 写测试脚本时如果精确比较字节（`b'42\n'` vs `b'42\r\n'`）会失败。解决：system prompt 提醒用 `.strip()` 比较
+2. **Judge 预测答案必错**：Judge 预测 `expected_output` 经常算错（如词频统计），导致正确的 Agent 输出被判为失败。解决：改为 criteria-based 验证，Judge 只定义验证标准，Agent 自己写测试
+3. **Judge 内嵌断言**：Judge 把精确比较写进 `verification.command`（如 `python x.py | python -c "assert ..."`），Agent 无法修改。解决：约束 command 必须是 `python test_xxx.py` 形式
+4. **Windows 路径大小写**：`Path.resolve()` 在 Windows 上驱动器号大小写不一致导致路径逃逸检查误报。解决：用 `.lower()` 做大小写无关比较
+5. **相对路径 workspace**：Executor 用相对路径存 workspace，不同时刻 resolve 结果不同。解决：init 时立即 `.resolve()` 为绝对路径
+6. **idle detection 过于激进**：只有 write_file 才重置计数器，正常的 read_file/list_dir 探索会触发 idle 停止。解决：任何成功的 tool call 都重置计数器
