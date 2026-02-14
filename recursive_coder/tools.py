@@ -9,6 +9,7 @@ from typing import Any
 from .executor import Executor
 from .logger_setup import get_logger
 from .models import ToolCallRecord
+from . import web_tools
 
 logger = get_logger("tools")
 
@@ -90,6 +91,56 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "web_search",
+            "description": (
+                "Search the web (Google) for information. Use this to find documentation, "
+                "algorithms, code examples, API references, research papers, or any knowledge "
+                "needed to complete the task. Returns titles, URLs, and snippets."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query (use English for best results)",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 5, max: 10)",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_page",
+            "description": (
+                "Fetch a web page and return its text content. Use this to read documentation, "
+                "code examples, tutorials, or any web resource found via web_search. "
+                "HTML is automatically converted to readable plain text."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL to fetch (must start with http:// or https://)",
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Maximum characters to return (default: 8000)",
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "task_done",
             "description": "Declare that the current task is finished. Call this when the verification passes.",
             "parameters": {
@@ -114,8 +165,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 class ToolExecutor:
     """Dispatch tool calls to the underlying Executor."""
 
-    def __init__(self, executor: Executor) -> None:
+    def __init__(self, executor: Executor, proxy: str | None = None) -> None:
         self.executor = executor
+        self.proxy = proxy  # for web_search / fetch_page
 
     async def execute(self, tool_name: str, arguments: dict) -> ToolCallRecord:
         t0 = time.monotonic()
@@ -136,6 +188,16 @@ class ToolExecutor:
                 success = not summary.startswith("ERROR")
             elif tool_name == "list_dir":
                 summary = await self.executor.list_dir(arguments.get("path", "."))
+                success = not summary.startswith("ERROR")
+            elif tool_name == "web_search":
+                query = arguments.get("query", "")
+                max_results = min(arguments.get("max_results", 5), 10)
+                summary = await web_tools.web_search(query, max_results, proxy=self.proxy)
+                success = not summary.startswith("ERROR")
+            elif tool_name == "fetch_page":
+                url = arguments.get("url", "")
+                max_chars = arguments.get("max_chars", 8000)
+                summary = await web_tools.fetch_page(url, max_chars, proxy=self.proxy)
                 success = not summary.startswith("ERROR")
             elif tool_name == "task_done":
                 summary = arguments.get("summary", "")

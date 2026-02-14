@@ -54,7 +54,7 @@ class RecursiveProcessor:
         self._semaphore = asyncio.Semaphore(max_parallel)
 
         # Build agent loop and tool executor
-        self.tool_executor = ToolExecutor(executor)
+        self.tool_executor = ToolExecutor(executor, proxy=config.get("proxy") or None)
         self.agent_loop = AgentLoop(
             api_caller=api_caller,
             tool_executor=self.tool_executor,

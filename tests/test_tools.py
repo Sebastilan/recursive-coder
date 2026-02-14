@@ -31,7 +31,7 @@ class TestToolDefinitions:
 
     def test_tool_names(self):
         names = {td["function"]["name"] for td in TOOL_DEFINITIONS}
-        assert names == {"shell", "write_file", "read_file", "list_dir", "task_done"}
+        assert names == {"shell", "write_file", "read_file", "list_dir", "task_done", "web_search", "fetch_page"}
 
 
 class TestToolDispatch:

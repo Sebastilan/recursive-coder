@@ -29,6 +29,9 @@ command_blacklist:
   - "mkfs"
   - "dd if="
 
+# === 网络 ===
+proxy: ""  # HTTP proxy for web_search/fetch_page (e.g. "http://127.0.0.1:7897")
+
 # === 迭代优化 ===
 auto_apply_optimization: false
 optimization_rounds: 3
