@@ -14,11 +14,13 @@ L9-L10 VRP 基准测试（测试升级分解路径）：
 - VRP 数据来源：BCP-Lap 项目 TSPLIB 标准测试集（E-n22-k4, E-n13-k4）
 
 **L11 CVRP Branch-and-Price PASS**（2026-02-15，qwen-plus）：
-- 97 API 调用，931K tokens，1062s（~18min）
-- Depth=1，5 个 LEAF 子任务，首次 pass rate 100%
+- 最佳结果：84 API 调用，681K tokens，1333s（~22min）
+- Depth=1，5 个 LEAF 子任务
 - 3 个独立模块（parser/master/pricing）并行执行
 - branch_and_price 判为 LEAF 直接 import 已有模块（sibling context 修复生效）
 - 关键修复：judge prompt 添加 sibling context，防止递归冗余分解
+- Phase 6 优化：upstream module interface injection，tokens 从 931K 降至 681K（-27%）
+- 已知问题：pricing ESPPRC 实现质量随机，偶尔超时需重试（stochastic）
 
 上下文缓存监控已集成（api_caller.py 记录 cached_tokens），隐式缓存已确认生效。
 
@@ -116,3 +118,4 @@ python eval/run_eval.py --level 9 10 --model qwen-plus
 9. **Google 搜索返回 JS 渲染页**：httpx 无法获取 Google 搜索结果（全是 JS），Bing 国内版返回垃圾结果。解决：改用 DuckDuckGo HTML 版（`html.duckduckgo.com`）+ Cookie `kl=us-en`
 10. **DuckDuckGo 202 问题**：DDG 从某些 IP 返回 202 空页面。解决：设置 Cookie `kl=us-en` 强制英文区域后恢复正常
 11. **递归冗余分解**：Judge 评估子任务时不知道兄弟任务已实现了哪些模块（如 parser/master/pricing），导致 "integrate" 类子任务被递归分解为重新实现所有组件。解决：`prompt_builder.py` 新增 `_format_sibling_context()` 方法，在 judge prompt 中注入已完成兄弟任务的描述、产出文件和接口信息。judge.txt 添加 "禁止冗余分解" 规则
+12. **依赖模块 read_file 开销**：下游模块（如 branch_and_price）需要多次 read_file 了解上游模块接口，消耗大量 tokens。解决：`prompt_builder.py` 新增 `_format_upstream_modules()` 方法，在 execute prompt 中注入已完成上游模块的接口定义。master_problem tokens 从 183K 降至 47K
