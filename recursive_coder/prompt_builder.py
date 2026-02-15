@@ -93,6 +93,46 @@ class PromptBuilder:
             return ""
         return "\n\n".join(parts)
 
+    def _format_sibling_context(self, task: TaskNode, tree=None) -> str:
+        """Format completed sibling tasks so judge knows what's already available.
+
+        This prevents redundant decomposition — if parser/solver/etc. already
+        exist from sibling tasks, the judge should import them, not re-implement.
+        """
+        if not tree or not task.parent_id:
+            return ""
+
+        parent = tree.get_node(task.parent_id)
+        if not parent:
+            return ""
+
+        siblings = []
+        for cid in parent.children:
+            if cid == task.id:
+                continue
+            child = tree.get_node(cid)
+            if not child:
+                continue
+            if child.status.value == "passed":
+                iface_info = ""
+                if child.interface:
+                    func = child.interface.get("function", "")
+                    if func:
+                        iface_info = f" → {func}"
+                files = ", ".join(child.output_files) if child.output_files else "N/A"
+                siblings.append(
+                    f"- {child.description} [已完成]\n"
+                    f"  产出文件: {files}{iface_info}"
+                )
+
+        if not siblings:
+            return ""
+
+        header = (
+            "已完成的兄弟任务（这些模块已存在于工作目录中，可以直接 import 使用，禁止重新实现）：\n"
+        )
+        return header + "\n".join(siblings)
+
     def _format_ancestry_chain(self, task: TaskNode, tree=None) -> str:
         """Gap 3: Build an ancestry chain so deep tasks know their global context.
 
@@ -152,12 +192,14 @@ class PromptBuilder:
             context_section = "参考文件：\n" + self._read_files(task.context_files, workspace)
 
         parent_context_section = self._format_parent_context(task, tree)
+        sibling_context_section = self._format_sibling_context(task, tree)
 
         return tpl.format(
             task_description=task.description,
             data_input_section=data_section,
             context_section=context_section,
             parent_context_section=parent_context_section,
+            sibling_context_section=sibling_context_section,
         )
 
     def execute(self, task: TaskNode, workspace: str, tree=None) -> str:
