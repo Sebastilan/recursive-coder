@@ -173,6 +173,37 @@ class PromptBuilder:
 
         return "\n".join(parts)
 
+    def _format_upstream_modules(self, task: TaskNode, tree=None, workspace: str = "") -> str:
+        """Inject completed upstream (dependency) modules' interfaces into execute prompt.
+
+        This lets dependent tasks (like branch_and_price, main) know the exact
+        function signatures of their upstream modules without needing read_file calls.
+        """
+        if not tree or not task.dependencies:
+            return ""
+
+        modules = []
+        for dep_id in task.dependencies:
+            dep = tree.get_node(dep_id)
+            if not dep or dep.status.value != "passed":
+                continue
+
+            parts = [f"- {dep.description}"]
+            if dep.interface:
+                for key, val in dep.interface.items():
+                    parts.append(f"  {key}: {val}")
+            if dep.output_files:
+                parts.append(f"  产出文件: {', '.join(dep.output_files)}")
+            modules.append("\n".join(parts))
+
+        if not modules:
+            return ""
+
+        return (
+            "已完成的上游模块（可直接 import 使用，无需 read_file 查看源码）：\n"
+            + "\n".join(modules)
+        )
+
     # ── Phase prompts ──
 
     def judge(self, task: TaskNode, workspace: str, tree=None) -> str:
@@ -213,12 +244,15 @@ class PromptBuilder:
         interface_section = self._format_interface(task)
         # Gap 3: Inject ancestry chain so agent knows global context
         ancestry_section = self._format_ancestry_chain(task, tree)
+        # Performance: inject upstream module interfaces to reduce read_file calls
+        upstream_section = self._format_upstream_modules(task, tree, workspace)
 
         return tpl.format(
             task_description=task.description,
             ancestry_section=ancestry_section,
             execution_plan_section=execution_plan_section,
             interface_section=interface_section,
+            upstream_modules_section=upstream_section,
             verification_description=v.description if v else "",
             verification_criteria=v.criteria if v else "",
             verification_command=v.command if v else "",

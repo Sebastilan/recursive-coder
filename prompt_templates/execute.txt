@@ -7,6 +7,8 @@
 
 {interface_section}
 
+{upstream_modules_section}
+
 验证标准：
 - 说明：{verification_description}
 - 验证条件：{verification_criteria}

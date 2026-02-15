@@ -8,11 +8,10 @@
 
 {context_section}
 
-请编写集成验证，确认所有子模块协作正确。你可以使用 shell、write_file、read_file、list_dir 工具。
+请验证所有子模块协作正确。你可以使用 shell、write_file、read_file、list_dir 工具。
 
-集成验证流程：
-1. 用 list_dir 和 read_file 查看所有子模块的输出文件
-2. 对照接口契约，验证各子模块的输出格式是否符合约定
-3. 编写一个集成测试脚本，验证模块间的数据流转是否正确
-4. 运行集成测试
-5. 通过后调用 task_done 声明完成
+集成验证流程（高效执行，避免不必要的 read_file）：
+1. 直接运行主程序/入口脚本，检查输出是否正确
+2. 如果有 output/ 目录的结果文件，检查其内容
+3. 只有在运行报错时才 read_file 排查问题
+4. 通过后调用 task_done 声明完成
